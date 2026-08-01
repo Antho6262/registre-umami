@@ -190,7 +190,12 @@
   tbody tr:hover{background:rgba(255,255,255,0.02);}
   tbody tr.custom-row{background:rgba(201,162,74,0.05);}
   td.nom{color:#f4ece0;font-weight:600;min-width:150px;}
-  td.role{color:var(--text-muted);font-family:'Helvetica Neue',Arial,sans-serif;font-size:12.5px;}
+  td.role{color:var(--text-muted);font-family:'Helvetica Neue',Arial,sans-serif;font-size:12.5px;font-weight:600;}
+  td.role.cat-direction{color:#c9a24a;}
+  td.role.cat-rh{color:#7fa8d9;}
+  td.role.cat-cuisine{color:#7ec98f;}
+  td.role.cat-runner{color:#e0935f;}
+  td.role.cat-autre{color:var(--text-muted);}
   td.raison{max-width:420px;line-height:1.5;font-size:13px;color:#cbb99f;}
   td.tel,td.banque,td.id{font-family:'Courier New',monospace;font-size:12.5px;color:var(--text-muted);white-space:nowrap;}
   td.statut{text-align:center;font-size:16px;}
@@ -349,6 +354,7 @@
       <div class="field">
         <label>Rôle</label>
         <select id="f-role">
+          <option value="" selected disabled>— Choisir un rôle —</option>
           <optgroup label="Direction">
             <option value="Patron">Patron</option>
             <option value="Co-Patron">Co-Patron</option>
@@ -455,6 +461,15 @@ function escapeHtml(s){
   return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+function roleCategory(role){
+  const r = (role||'').toLowerCase();
+  if(/patron|^dg|dg\b|daf|drh|dme|\bdl\b|chauffeur des patrons/.test(r)) return 'cat-direction';
+  if(/\brh\b|assistant.?event|stagiaire rs event/.test(r)) return 'cat-rh';
+  if(/maitre sushi|maître sushi|chef d|chef de rang|serveu/.test(r)) return 'cat-cuisine';
+  if(/runner/.test(r)) return 'cat-runner';
+  return 'cat-autre';
+}
+
 function render(){
   const rows = getRows(activeTab);
   const term = searchTerm.trim().toLowerCase();
@@ -485,7 +500,7 @@ function render(){
   for(const r of filtered){
     html += '<tr class="' + (r.__custom ? 'custom-row' : '') + '">' +
       '<td class="nom">' + escapeHtml(r.nom) + '</td>' +
-      '<td class="role">' + escapeHtml(r.role) + '</td>' +
+      '<td class="role ' + roleCategory(r.role) + '">' + escapeHtml(r.role) + '</td>' +
       '<td class="tel">' + escapeHtml(r.tel) + '</td>' +
       '<td class="banque">' + escapeHtml(r.banque) + '</td>' +
       '<td class="id">' + escapeHtml(r.id) + '</td>' +
