@@ -631,14 +631,72 @@ function detectStatut(raw){
   return null;
 }
 
+function normalizeLabel(s){
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z]/g,'');
+}
+
+function parsePastedText(raw){
+  const lines = raw.split('\n').map(l=>l.trim()).filter(l=>l.length>0);
+  const result = {nom:'', role:'', tel:'', banque:'', id:'', statut:'', raison:''};
+
+  const hasLabels = lines.some(l=>l.includes(':'));
+
+  if(hasLabels){
+    lines.forEach(line=>{
+      const idx = line.indexOf(':');
+      if(idx === -1) return;
+      const label = normalizeLabel(line.slice(0, idx));
+      const value = line.slice(idx+1).trim();
+      if(!value) return;
+      if(label.includes('prenom') || (label.includes('nom') && !label.includes('surnom'))) result.nom = value;
+      else if(label.includes('role')) result.role = value;
+      else if(label.includes('telephone') || label === 'tel') result.tel = value;
+      else if(label.includes('bancaire') || label.includes('banque')) result.banque = value;
+      else if(label.includes('id')) result.id = value;
+      else if(label.includes('statut')) result.statut = value;
+      else if(label.includes('raison') || label.includes('motif')) result.raison = value;
+      // 'age' and unrecognized labels are ignored (no matching field)
+    });
+  }else if(lines.length > 1){
+    // Positional multi-line paste without labels: Nom / Age / Téléphone / Banque / ID / Raison
+    const phoneRe = /^\d{2,3}[\s-]?\d{3}[\s-]?\d{2,3}/;
+    const numRe = /^\d+$/;
+    const rest = [];
+    lines.forEach(line=>{
+      if(!result.nom && !phoneRe.test(line) && !numRe.test(line)){
+        result.nom = line;
+      }else if(numRe.test(line) && line.length <= 2){
+        // likely an age value, ignore
+      }else if(!result.tel && (phoneRe.test(line) || line.startsWith('555'))){
+        result.tel = line;
+      }else{
+        rest.push(line);
+      }
+    });
+    if(rest[0]) result.banque = rest[0];
+    if(rest[1]) result.id = rest[1];
+    if(rest[2]) result.raison = rest.slice(2).join(' ');
+  }else{
+    // Single line: tab-separated or multi-space-separated table row
+    let parts = raw.split('\t');
+    if(parts.length < 5) parts = raw.trim().split(/ {2,}/);
+    parts = parts.map(p=>p.trim());
+    const [pNom, pRole, pTel, pBanque, pId, pStatut, ...pRaisonParts] = parts;
+    result.nom = pNom || '';
+    result.role = pRole || '';
+    result.tel = pTel || '';
+    result.banque = pBanque || '';
+    result.id = pId || '';
+    result.statut = pStatut || '';
+    result.raison = pRaisonParts.join(' ').trim();
+  }
+  return result;
+}
+
 document.getElementById('fillFromPaste').addEventListener('click', ()=>{
   const raw = document.getElementById('f-paste').value;
   if(!raw.trim()) return;
-  let parts = raw.split('\t');
-  if(parts.length < 5) parts = raw.trim().split(/ {2,}/);
-  parts = parts.map(p=>p.trim());
-  const [pNom, pRole, pTel, pBanque, pId, pStatut, ...pRaisonParts] = parts;
-  const pRaison = pRaisonParts.join(' ').trim();
+  const { nom: pNom, role: pRole, tel: pTel, banque: pBanque, id: pId, statut: pStatut, raison: pRaison } = parsePastedText(raw);
 
   if(pNom) document.getElementById('f-nom').value = pNom;
   if(pTel) document.getElementById('f-tel').value = pTel;
