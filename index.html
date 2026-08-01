@@ -514,7 +514,7 @@ async function persist(tab){
   try{
     const key = tab === 'main' ? 'registre:main' : tab === 'actif' ? 'registre:actif' : 'registre:blacklist';
     const data = tab === 'main' ? customMain : tab === 'actif' ? customActive : customBl;
-    await window.storage.set(key, JSON.stringify(data), false);
+    localStorage.setItem(key, JSON.stringify(data));
   }catch(e){
     console.error('Erreur de sauvegarde', e);
   }
@@ -522,16 +522,16 @@ async function persist(tab){
 
 async function loadCustomData(){
   try{
-    const m = await window.storage.get('registre:main', false);
-    customMain = m ? JSON.parse(m.value) : [];
+    const m = localStorage.getItem('registre:main');
+    customMain = m ? JSON.parse(m) : [];
   }catch(e){ customMain = []; }
   try{
-    const a = await window.storage.get('registre:actif', false);
-    customActive = a ? JSON.parse(a.value) : [];
+    const a = localStorage.getItem('registre:actif');
+    customActive = a ? JSON.parse(a) : [];
   }catch(e){ customActive = []; }
   try{
-    const b = await window.storage.get('registre:blacklist', false);
-    customBl = b ? JSON.parse(b.value) : [];
+    const b = localStorage.getItem('registre:blacklist');
+    customBl = b ? JSON.parse(b) : [];
   }catch(e){ customBl = []; }
   render();
 }
@@ -686,4 +686,5 @@ document.getElementById('saveEntry').addEventListener('click', async ()=>{
 loadCustomData();
 </script>
 </body>
+</html>
 </html>
