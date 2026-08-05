@@ -287,6 +287,8 @@
     .stamp{text-align:left;}
   }
 </style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 </head>
 <body>
 
@@ -527,55 +529,65 @@ function render(){
   });
 }
 
-const memoryStore = {};
-let useLocalStorage = false;
+let firebaseReady = false;
 try{
-  const testKey = '__registre_test__';
-  localStorage.setItem(testKey, '1');
-  localStorage.removeItem(testKey);
-  useLocalStorage = true;
+  firebase.initializeApp({
+    apiKey: "AIzaSyDdzXrPClaeN2swN9Ve_OtIHIl9Wn6O200",
+    authDomain: "registre-umami.firebaseapp.com",
+    databaseURL: "https://registre-umami-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "registre-umami",
+    storageBucket: "registre-umami.firebasestorage.app",
+    messagingSenderId: "536436706526",
+    appId: "1:536436706526:web:2dc7118d211b74c589064f"
+  });
+  firebaseReady = true;
 }catch(e){
-  useLocalStorage = false;
+  console.error('Firebase init error', e);
 }
+const db = firebaseReady ? firebase.database() : null;
 
-function storageGet(key){
-  try{
-    if(useLocalStorage) return localStorage.getItem(key);
-    return Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : null;
-  }catch(e){ return null; }
-}
-function storageSet(key, value){
-  try{
-    if(useLocalStorage){ localStorage.setItem(key, value); }
-    else{ memoryStore[key] = value; }
-  }catch(e){ memoryStore[key] = value; }
+function refPath(tab){
+  return tab === 'main' ? 'registre/main' : tab === 'actif' ? 'registre/actif' : 'registre/blacklist';
 }
 
 async function persist(tab){
+  if(!db) return;
   try{
-    const key = tab === 'main' ? 'registre:main' : tab === 'actif' ? 'registre:actif' : 'registre:blacklist';
     const data = tab === 'main' ? customMain : tab === 'actif' ? customActive : customBl;
-    storageSet(key, JSON.stringify(data));
+    await db.ref(refPath(tab)).set(data);
   }catch(e){
-    console.error('Erreur de sauvegarde', e);
+    console.error('Erreur de sauvegarde Firebase', e);
   }
 }
 
-async function loadCustomData(){
-  try{
-    const m = storageGet('registre:main');
-    customMain = m ? JSON.parse(m) : [];
-  }catch(e){ customMain = []; }
-  try{
-    const a = storageGet('registre:actif');
-    customActive = a ? JSON.parse(a) : [];
-  }catch(e){ customActive = []; }
-  try{
-    const b = storageGet('registre:blacklist');
-    customBl = b ? JSON.parse(b) : [];
-  }catch(e){ customBl = []; }
-  render();
+function arrify(val){
+  if(!val) return [];
+  if(Array.isArray(val)) return val;
+  // Firebase can return an object with numeric keys instead of a real array
+  return Object.keys(val).sort((a,b)=>a-b).map(k=>val[k]);
 }
+
+async function loadCustomData(){
+  if(!db){
+    // No Firebase connection available: keep working with empty in-memory lists
+    customMain = []; customActive = []; customBl = [];
+    render();
+    return;
+  }
+  db.ref('registre/main').on('value', snap => {
+    customMain = arrify(snap.val());
+    render();
+  });
+  db.ref('registre/actif').on('value', snap => {
+    customActive = arrify(snap.val());
+    render();
+  });
+  db.ref('registre/blacklist').on('value', snap => {
+    customBl = arrify(snap.val());
+    render();
+  });
+}
+
 
 document.querySelectorAll('nav.tabs button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
