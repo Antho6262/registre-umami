@@ -329,6 +329,7 @@
       <option value="☠">☠ Blacklist</option>
     </select>
     <button class="btn secondary" id="toggleAdd">+ Ajouter une fiche</button>
+    <button class="btn secondary" id="recoverLocal" style="display:none;">Récupérer les fiches locales</button>
   </div>
 
   <p class="result-count" id="resultCount"></p>
@@ -798,6 +799,44 @@ document.getElementById('saveEntry').addEventListener('click', async ()=>{
   render();
   document.getElementById('tableHost').scrollIntoView({behavior:'smooth', block:'start'});
 });
+
+(function checkForLeftoverLocalData(){
+  try{
+    const oldMain = localStorage.getItem('registre:main');
+    const oldActif = localStorage.getItem('registre:actif');
+    const oldBl = localStorage.getItem('registre:blacklist');
+    const hasAny = [oldMain, oldActif, oldBl].some(v => {
+      if(!v) return false;
+      try{ return JSON.parse(v).length > 0; }catch(e){ return false; }
+    });
+    if(hasAny){
+      const btn = document.getElementById('recoverLocal');
+      btn.style.display = 'inline-block';
+      btn.addEventListener('click', async ()=>{
+        btn.textContent = 'Récupération…';
+        try{
+          const localMain = oldMain ? JSON.parse(oldMain) : [];
+          const localActif = oldActif ? JSON.parse(oldActif) : [];
+          const localBl = oldBl ? JSON.parse(oldBl) : [];
+          customMain = [...localMain, ...customMain];
+          customActive = [...localActif, ...customActive];
+          customBl = [...localBl, ...customBl];
+          await persist('main');
+          await persist('actif');
+          await persist('blacklist');
+          localStorage.removeItem('registre:main');
+          localStorage.removeItem('registre:actif');
+          localStorage.removeItem('registre:blacklist');
+          btn.textContent = 'Fiches récupérées ✓';
+          setTimeout(()=>{ btn.style.display = 'none'; }, 3000);
+        }catch(e){
+          console.error('Erreur de récupération', e);
+          btn.textContent = 'Erreur, réessaye';
+        }
+      });
+    }
+  }catch(e){ /* localStorage unavailable, nothing to recover */ }
+})();
 
 loadCustomData();
 </script>
