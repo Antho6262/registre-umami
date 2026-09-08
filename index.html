@@ -286,11 +286,101 @@
     td.raison{max-width:200px;}
     .stamp{text-align:left;}
   }
+  /* --- Authentification --- */
+  #authOverlay{
+    position:fixed; inset:0; z-index:1000;
+    background:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+    padding:20px;
+  }
+  .auth-box{
+    width:100%; max-width:380px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    padding:34px 30px;
+  }
+  .auth-box h1{font-size:26px;margin:0 0 6px;}
+  .auth-box p.hint{font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;color:var(--text-muted);margin:0 0 22px;}
+  .auth-box .field{margin-bottom:14px;}
+  .auth-box .field label{display:block;font-family:'Helvetica Neue',Arial,sans-serif;font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--gold);margin-bottom:6px;}
+  .auth-box select, .auth-box input{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); color:#f4ece0;
+    font-family:'Helvetica Neue',Arial,sans-serif; font-size:14px; padding:11px 12px; outline:none;
+  }
+  .auth-box select:focus, .auth-box input:focus{border-color:var(--accent);}
+  .auth-box .btn{width:100%;margin-top:8px;padding:13px;}
+  .auth-error{color:var(--accent);font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;margin-top:10px;min-height:16px;}
+  .auth-switch{font-family:'Helvetica Neue',Arial,sans-serif;font-size:11.5px;color:var(--text-muted);margin-top:18px;text-align:center;}
+  .auth-switch a{color:var(--gold);cursor:pointer;text-decoration:underline;}
+
+  .session-bar{
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    font-family:'Helvetica Neue',Arial,sans-serif; font-size:12px; color:var(--text-muted);
+    margin-top:12px;
+  }
+  .session-bar b{color:var(--accent-soft);}
+  .session-bar button{
+    background:none;border:1px solid var(--line);color:var(--accent-soft);
+    font-size:11px;letter-spacing:0.06em;text-transform:uppercase;
+    padding:6px 12px;cursor:pointer;
+  }
+  .session-bar button:hover{border-color:var(--gold);color:var(--gold);}
+
+  .members-panel{
+    margin-top:26px; border:1px solid var(--line); background:var(--panel); padding:24px 26px;
+  }
+  .members-panel h2{font-family:'Times New Roman',Georgia,serif;font-style:italic;font-weight:400;font-size:20px;color:#f4ece0;margin:0 0 16px;}
+  .members-list{margin-bottom:20px;}
+  .members-list .member-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 0; border-bottom:1px solid var(--line);
+    font-family:'Helvetica Neue',Arial,sans-serif; font-size:13.5px;
+  }
+  .members-list .member-row .m-name{color:#f4ece0;}
+  .members-list .member-row .m-admin{font-size:10px;color:var(--gold);margin-left:8px;letter-spacing:0.06em;text-transform:uppercase;}
+  .members-list .member-row button{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:15px;}
+  .members-list .member-row button:hover{color:var(--accent);}
+  .add-member-grid{display:grid;grid-template-columns:1fr 1fr auto auto;gap:10px;align-items:end;}
+  .add-member-grid .field label{display:block;font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--gold);margin-bottom:6px;font-family:'Helvetica Neue',Arial,sans-serif;}
+  .add-member-grid input{width:100%;background:var(--panel-2);border:1px solid var(--line);color:#f4ece0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;padding:10px 11px;}
+  .add-member-grid label.chk{display:flex;align-items:center;gap:6px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;color:var(--text-muted);white-space:nowrap;}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 </head>
 <body>
+
+<div id="authOverlay">
+  <div class="auth-box" id="loginBox" style="display:none;">
+    <h1>Connexion</h1>
+    <p class="hint">Sélectionne ton nom et entre ton mot de passe.</p>
+    <div class="field">
+      <label>Nom</label>
+      <select id="loginName"></select>
+    </div>
+    <div class="field">
+      <label>Mot de passe</label>
+      <input type="password" id="loginPassword">
+    </div>
+    <button class="btn" id="loginBtn">Se connecter</button>
+    <p class="auth-error" id="loginError"></p>
+  </div>
+
+  <div class="auth-box" id="setupBox" style="display:none;">
+    <h1>Configuration initiale</h1>
+    <p class="hint">Aucun membre n'existe encore. Crée le premier compte (administrateur).</p>
+    <div class="field">
+      <label>Nom</label>
+      <input type="text" id="setupName" placeholder="Ton nom">
+    </div>
+    <div class="field">
+      <label>Mot de passe</label>
+      <input type="password" id="setupPassword">
+    </div>
+    <button class="btn" id="setupBtn">Créer le compte administrateur</button>
+    <p class="auth-error" id="setupError"></p>
+  </div>
+</div>
 
 <header class="top">
   <div class="inner">
@@ -312,6 +402,13 @@
 
 <div class="wrap">
 
+  <div class="session-bar" id="sessionBar">
+    Connecté en tant que <b id="sessionName">—</b>
+    <button id="changePwBtn">Changer mon mot de passe</button>
+    <button id="manageMembersBtn" style="display:none;">Gérer les membres</button>
+    <button id="logoutBtn">Déconnexion</button>
+  </div>
+
   <nav class="tabs">
     <button class="active" data-tab="main">Registre général <span class="count" id="tab-count-main">0</span></button>
     <button data-tab="actif">Personnel actif <span class="count" id="tab-count-actif">0</span></button>
@@ -329,10 +426,31 @@
       <option value="☠">☠ Blacklist</option>
     </select>
     <button class="btn secondary" id="toggleAdd">+ Ajouter une fiche</button>
-    <button class="btn secondary" id="recoverLocal" style="display:none;">Récupérer les fiches locales</button>
   </div>
 
   <p class="result-count" id="resultCount"></p>
+
+  <section class="members-panel" id="membersPanel" style="display:none;">
+    <h2>Gestion des membres</h2>
+    <div class="members-list" id="membersList"></div>
+    <div class="add-member-grid">
+      <div class="field"><label>Nom</label><input type="text" id="nm-name" placeholder="Nom du membre"></div>
+      <div class="field"><label>Mot de passe initial</label><input type="password" id="nm-pass"></div>
+      <label class="chk"><input type="checkbox" id="nm-admin"> Administrateur</label>
+      <button class="btn secondary" id="nm-add" type="button">Ajouter</button>
+    </div>
+    <p class="auth-error" id="nm-error"></p>
+  </section>
+
+  <section class="members-panel" id="pwPanel" style="display:none;">
+    <h2>Changer mon mot de passe</h2>
+    <div class="add-member-grid" style="grid-template-columns:1fr 1fr auto;">
+      <div class="field"><label>Mot de passe actuel</label><input type="password" id="pw-current"></div>
+      <div class="field"><label>Nouveau mot de passe</label><input type="password" id="pw-new"></div>
+      <button class="btn secondary" id="pw-save" type="button">Valider</button>
+    </div>
+    <p class="auth-error" id="pw-error"></p>
+  </section>
 
   <section class="add-panel" id="addPanel" style="display:none;">
     <h2>Nouvelle fiche</h2>
@@ -547,6 +665,239 @@ try{
 }
 const db = firebaseReady ? firebase.database() : null;
 
+/* ================= AUTHENTIFICATION ================= */
+
+let currentUser = null; // { key, nom, isAdmin }
+
+async function sha256Hex(text){
+  const enc = new TextEncoder().encode(text);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function randomSalt(){
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function hashPassword(password, salt){
+  return sha256Hex(salt + ':' + password);
+}
+
+function membersRef(){ return db.ref('membres'); }
+
+async function fetchMembers(){
+  if(!db) return {};
+  const snap = await membersRef().once('value');
+  return snap.val() || {};
+}
+
+function showAuthScreen(){
+  document.getElementById('authOverlay').style.display = 'flex';
+}
+function hideAuthScreen(){
+  document.getElementById('authOverlay').style.display = 'none';
+}
+
+function setSession(key, nom, isAdmin){
+  currentUser = { key, nom, isAdmin: !!isAdmin };
+  try{ sessionStorage.setItem('umami_session', JSON.stringify(currentUser)); }catch(e){}
+  document.getElementById('sessionName').textContent = nom;
+  document.getElementById('manageMembersBtn').style.display = isAdmin ? 'inline-block' : 'none';
+  hideAuthScreen();
+}
+
+function clearSession(){
+  currentUser = null;
+  try{ sessionStorage.removeItem('umami_session'); }catch(e){}
+  showAuthScreen();
+}
+
+async function populateLoginDropdown(members){
+  const sel = document.getElementById('loginName');
+  sel.innerHTML = '';
+  Object.entries(members).forEach(([key, m])=>{
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = m.nom;
+    sel.appendChild(opt);
+  });
+}
+
+async function initAuth(){
+  if(!db){
+    // Pas de connexion Firebase : on laisse passer sans authentification
+    hideAuthScreen();
+    return;
+  }
+  const members = await fetchMembers();
+  const memberCount = Object.keys(members).length;
+
+  if(memberCount === 0){
+    document.getElementById('setupBox').style.display = 'block';
+    document.getElementById('loginBox').style.display = 'none';
+    showAuthScreen();
+    return;
+  }
+
+  // Session déjà active dans cet onglet ?
+  try{
+    const saved = sessionStorage.getItem('umami_session');
+    if(saved){
+      const parsed = JSON.parse(saved);
+      if(members[parsed.key]){
+        setSession(parsed.key, members[parsed.key].nom, members[parsed.key].isAdmin);
+        return;
+      }
+    }
+  }catch(e){}
+
+  await populateLoginDropdown(members);
+  document.getElementById('setupBox').style.display = 'none';
+  document.getElementById('loginBox').style.display = 'block';
+  showAuthScreen();
+}
+
+document.getElementById('setupBtn').addEventListener('click', async ()=>{
+  const nom = document.getElementById('setupName').value.trim();
+  const pass = document.getElementById('setupPassword').value;
+  const errEl = document.getElementById('setupError');
+  errEl.textContent = '';
+  if(!nom || !pass){
+    errEl.textContent = 'Nom et mot de passe requis.';
+    return;
+  }
+  try{
+    const salt = randomSalt();
+    const hash = await hashPassword(pass, salt);
+    const ref = membersRef().push();
+    await ref.set({ nom, salt, hash, isAdmin: true });
+    setSession(ref.key, nom, true);
+  }catch(e){
+    errEl.textContent = 'Erreur : ' + e.message;
+  }
+});
+
+document.getElementById('loginBtn').addEventListener('click', async ()=>{
+  const key = document.getElementById('loginName').value;
+  const pass = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  try{
+    const members = await fetchMembers();
+    const m = members[key];
+    if(!m){ errEl.textContent = 'Membre introuvable.'; return; }
+    const hash = await hashPassword(pass, m.salt);
+    if(hash !== m.hash){
+      errEl.textContent = 'Mot de passe incorrect.';
+      return;
+    }
+    setSession(key, m.nom, m.isAdmin);
+  }catch(e){
+    errEl.textContent = 'Erreur : ' + e.message;
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', ()=>{
+  clearSession();
+});
+
+/* ---- Gestion des membres (admin) ---- */
+async function renderMembersList(){
+  const members = await fetchMembers();
+  const host = document.getElementById('membersList');
+  host.innerHTML = '';
+  Object.entries(members).forEach(([key, m])=>{
+    const row = document.createElement('div');
+    row.className = 'member-row';
+    row.innerHTML = '<span class="m-name">' + escapeHtml(m.nom) + (m.isAdmin ? '<span class="m-admin">Admin</span>' : '') + '</span>' +
+      '<button data-key="' + key + '" title="Supprimer">✕</button>';
+    host.appendChild(row);
+  });
+  host.querySelectorAll('button[data-key]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const key = btn.getAttribute('data-key');
+      if(key === currentUser.key){
+        alert("Tu ne peux pas te supprimer toi-même.");
+        return;
+      }
+      await membersRef().child(key).remove();
+      renderMembersList();
+    });
+  });
+}
+
+document.getElementById('manageMembersBtn').addEventListener('click', ()=>{
+  const panel = document.getElementById('membersPanel');
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? 'block' : 'none';
+  if(opening){
+    renderMembersList();
+    panel.scrollIntoView({behavior:'smooth', block:'start'});
+  }
+});
+
+document.getElementById('nm-add').addEventListener('click', async ()=>{
+  const nom = document.getElementById('nm-name').value.trim();
+  const pass = document.getElementById('nm-pass').value;
+  const isAdmin = document.getElementById('nm-admin').checked;
+  const errEl = document.getElementById('nm-error');
+  errEl.textContent = '';
+  if(!nom || !pass){
+    errEl.textContent = 'Nom et mot de passe requis.';
+    return;
+  }
+  try{
+    const salt = randomSalt();
+    const hash = await hashPassword(pass, salt);
+    const ref = membersRef().push();
+    await ref.set({ nom, salt, hash, isAdmin });
+    document.getElementById('nm-name').value = '';
+    document.getElementById('nm-pass').value = '';
+    document.getElementById('nm-admin').checked = false;
+    renderMembersList();
+  }catch(e){
+    errEl.textContent = 'Erreur : ' + e.message;
+  }
+});
+
+/* ---- Changer son mot de passe ---- */
+document.getElementById('changePwBtn').addEventListener('click', ()=>{
+  const panel = document.getElementById('pwPanel');
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? 'block' : 'none';
+  if(opening) panel.scrollIntoView({behavior:'smooth', block:'start'});
+});
+
+document.getElementById('pw-save').addEventListener('click', async ()=>{
+  const current = document.getElementById('pw-current').value;
+  const next = document.getElementById('pw-new').value;
+  const errEl = document.getElementById('pw-error');
+  errEl.textContent = '';
+  if(!current || !next){
+    errEl.textContent = 'Les deux champs sont requis.';
+    return;
+  }
+  try{
+    const snap = await membersRef().child(currentUser.key).once('value');
+    const m = snap.val();
+    const currentHash = await hashPassword(current, m.salt);
+    if(currentHash !== m.hash){
+      errEl.textContent = 'Mot de passe actuel incorrect.';
+      return;
+    }
+    const newSalt = randomSalt();
+    const newHash = await hashPassword(next, newSalt);
+    await membersRef().child(currentUser.key).update({ salt: newSalt, hash: newHash });
+    document.getElementById('pw-current').value = '';
+    document.getElementById('pw-new').value = '';
+    document.getElementById('pwPanel').style.display = 'none';
+    errEl.textContent = '';
+  }catch(e){
+    errEl.textContent = 'Erreur : ' + e.message;
+  }
+});
+
+
 function refPath(tab){
   return tab === 'main' ? 'registre/main' : tab === 'actif' ? 'registre/actif' : 'registre/blacklist';
 }
@@ -568,6 +919,44 @@ function arrify(val){
   return Object.keys(val).sort((a,b)=>a-b).map(k=>val[k]);
 }
 
+function getLeftoverLocal(key){
+  try{
+    const v = localStorage.getItem(key);
+    const parsed = v ? JSON.parse(v) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  }catch(e){ return []; }
+}
+
+async function migrateLeftoverLocalData(){
+  const localMain = getLeftoverLocal('registre:main');
+  const localActif = getLeftoverLocal('registre:actif');
+  const localBl = getLeftoverLocal('registre:blacklist');
+  if(localMain.length === 0 && localActif.length === 0 && localBl.length === 0) return;
+
+  try{
+    const [snapMain, snapActif, snapBl] = await Promise.all([
+      db.ref('registre/main').once('value'),
+      db.ref('registre/actif').once('value'),
+      db.ref('registre/blacklist').once('value')
+    ]);
+    const mergedMain = [...localMain, ...arrify(snapMain.val())];
+    const mergedActif = [...localActif, ...arrify(snapActif.val())];
+    const mergedBl = [...localBl, ...arrify(snapBl.val())];
+    await Promise.all([
+      db.ref('registre/main').set(mergedMain),
+      db.ref('registre/actif').set(mergedActif),
+      db.ref('registre/blacklist').set(mergedBl)
+    ]);
+    try{
+      localStorage.removeItem('registre:main');
+      localStorage.removeItem('registre:actif');
+      localStorage.removeItem('registre:blacklist');
+    }catch(e){}
+  }catch(e){
+    console.error('Erreur de migration automatique', e);
+  }
+}
+
 async function loadCustomData(){
   if(!db){
     // No Firebase connection available: keep working with empty in-memory lists
@@ -575,6 +964,7 @@ async function loadCustomData(){
     render();
     return;
   }
+  await migrateLeftoverLocalData();
   db.ref('registre/main').on('value', snap => {
     customMain = arrify(snap.val());
     render();
@@ -800,44 +1190,8 @@ document.getElementById('saveEntry').addEventListener('click', async ()=>{
   document.getElementById('tableHost').scrollIntoView({behavior:'smooth', block:'start'});
 });
 
-(function checkForLeftoverLocalData(){
-  try{
-    const oldMain = localStorage.getItem('registre:main');
-    const oldActif = localStorage.getItem('registre:actif');
-    const oldBl = localStorage.getItem('registre:blacklist');
-    const hasAny = [oldMain, oldActif, oldBl].some(v => {
-      if(!v) return false;
-      try{ return JSON.parse(v).length > 0; }catch(e){ return false; }
-    });
-    if(hasAny){
-      const btn = document.getElementById('recoverLocal');
-      btn.style.display = 'inline-block';
-      btn.addEventListener('click', async ()=>{
-        btn.textContent = 'Récupération…';
-        try{
-          const localMain = oldMain ? JSON.parse(oldMain) : [];
-          const localActif = oldActif ? JSON.parse(oldActif) : [];
-          const localBl = oldBl ? JSON.parse(oldBl) : [];
-          customMain = [...localMain, ...customMain];
-          customActive = [...localActif, ...customActive];
-          customBl = [...localBl, ...customBl];
-          await persist('main');
-          await persist('actif');
-          await persist('blacklist');
-          localStorage.removeItem('registre:main');
-          localStorage.removeItem('registre:actif');
-          localStorage.removeItem('registre:blacklist');
-          btn.textContent = 'Fiches récupérées ✓';
-          setTimeout(()=>{ btn.style.display = 'none'; }, 3000);
-        }catch(e){
-          console.error('Erreur de récupération', e);
-          btn.textContent = 'Erreur, réessaye';
-        }
-      });
-    }
-  }catch(e){ /* localStorage unavailable, nothing to recover */ }
-})();
 
+initAuth();
 loadCustomData();
 </script>
 </body>
