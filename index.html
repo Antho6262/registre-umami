@@ -23,10 +23,29 @@
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
-    background:var(--ink);
+    background-color:var(--ink);
+    background-image:
+      repeating-radial-gradient(circle at 0 100%, transparent 0px, transparent 17px, rgba(201,162,74,0.05) 18px, rgba(201,162,74,0.05) 19px, transparent 20px),
+      repeating-radial-gradient(circle at 100% 100%, transparent 0px, transparent 17px, rgba(179,64,42,0.045) 18px, rgba(179,64,42,0.045) 19px, transparent 20px);
+    background-size:56px 28px;
+    background-position:0 0, 28px 14px;
+    background-attachment:fixed;
     color:var(--accent-soft);
     font-family:'Iowan Old Style','Georgia',serif;
     min-height:100vh;
+    position:relative;
+  }
+  body::before{
+    content:"龍";
+    position:fixed;
+    right:-4vw; bottom:-8vh;
+    font-family:'Times New Roman', serif;
+    font-size:44vw;
+    line-height:1;
+    color:rgba(201,162,74,0.035);
+    pointer-events:none;
+    z-index:0;
+    user-select:none;
   }
   ::selection{background:var(--accent);color:#fff;}
 
@@ -971,12 +990,26 @@ function catSlug(cat){
     .replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
 }
 
+const CATEGORY_ORDER = [
+  'Soft', 'Mocktail', 'Granités', 'Café - Thé',
+  'Verre', 'Alcool',
+  'Entrée', 'Plat', 'Dessert', 'Création Menu',
+  'Fumette', 'Collection', 'Déstock', 'Divers'
+];
+
 function invCategories(){
   const cats = [];
   invItems.forEach(it=>{
     if(it.type && !cats.includes(it.type)) cats.push(it.type);
   });
-  return cats.sort((a,b)=>a.localeCompare(b, 'fr'));
+  return cats.sort((a,b)=>{
+    const ia = CATEGORY_ORDER.indexOf(a);
+    const ib = CATEGORY_ORDER.indexOf(b);
+    if(ia === -1 && ib === -1) return a.localeCompare(b, 'fr');
+    if(ia === -1) return 1;
+    if(ib === -1) return -1;
+    return ia - ib;
+  });
 }
 
 function renderInvTabs(){
