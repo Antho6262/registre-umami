@@ -386,6 +386,33 @@
     display:flex; align-items:flex-start; justify-content:center;
     padding:70px 20px; overflow:auto;
   }
+
+  .saving-indicator{
+    position:fixed; bottom:20px; right:20px; z-index:1100;
+    font-family:'Helvetica Neue',Arial,sans-serif; font-size:12px;
+    padding:9px 16px; border:1px solid var(--line);
+    background:var(--panel); color:var(--text-muted);
+    opacity:0; transform:translateY(8px);
+    transition:opacity .25s ease, transform .25s ease;
+    pointer-events:none;
+  }
+  .saving-indicator.show{opacity:1; transform:translateY(0);}
+  .saving-indicator.saving{color:var(--gold); border-color:var(--gold);}
+  .saving-indicator.saved{color:var(--ok); border-color:var(--ok);}
+
+  .hist-list{max-height:60vh; overflow:auto; font-family:'Helvetica Neue',Arial,sans-serif;}
+  .hist-row{
+    display:grid; grid-template-columns:150px 130px 160px 1fr; gap:10px;
+    padding:9px 0; border-bottom:1px solid var(--line);
+    font-size:12.5px; color:var(--accent-soft);
+  }
+  .hist-date{color:var(--text-muted); font-size:11px;}
+  .hist-user{color:var(--gold); font-weight:600;}
+  .hist-action{color:#f4ece0;}
+  .hist-details{color:var(--text-muted);}
+  @media (max-width:640px){
+    .hist-row{grid-template-columns:1fr; gap:2px; padding-bottom:14px;}
+  }
   .modal-backdrop .members-panel{
     width:100%; max-width:640px; margin-top:0;
   }
@@ -541,6 +568,37 @@
   .cat-plat{color:#d9a24a;}
   .cat-soft{color:#7fa8d9;}
   .cat-verre{color:#b699e0;}
+  /* --- Stock bas --- */
+  input.inv-low{
+    border-color:var(--accent);
+    background:rgba(179,64,42,0.15);
+    color:#ffb3a3;
+  }
+
+  /* --- En-têtes triables --- */
+  th.sortable{cursor:pointer; user-select:none;}
+  th.sortable:hover{color:#f4ece0;}
+
+  /* --- Défilement mobile des tableaux --- */
+  .table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .table-scroll table{min-width:900px;}
+
+  /* --- Impression --- */
+  @media print{
+    body::before{ display:none; }
+    body{ background:#fff !important; color:#000 !important; }
+    .session-bar, nav.tabs, .toolbar, .result-count#inv-totalValue,
+    #addPanel, #invAddPanel, .add-actions, td.del, th:last-child,
+    .modal-backdrop, .saving-indicator, footer{
+      display:none !important;
+    }
+    table{ width:100%; border-collapse:collapse; }
+    td, th{ color:#000 !important; border:1px solid #ccc !important; padding:6px !important; }
+    .table-scroll{ overflow:visible; }
+    .table-scroll table{ min-width:0; }
+    header.top{ background:#fff !important; }
+    h1, .brand-mark, .subtitle{ color:#000 !important; }
+  }
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -617,6 +675,7 @@
       Connecté en tant que <b id="invSessionName">—</b>
       <button id="invChangePwBtn">Changer mon mot de passe</button>
       <button id="invManageMembersBtn" style="display:none;">Gérer les membres</button>
+      <button id="invHistBtn">Historique</button>
       <button id="invBackBtn">← Accueil</button>
       <button id="invLogoutBtn">Déconnexion</button>
     </div>
@@ -627,11 +686,33 @@
       <div class="search-box">
         <input type="text" id="inv-search" placeholder="Rechercher un article, un fournisseur…">
       </div>
+      <button class="btn secondary" id="invAddBtn">+ Ajouter un article</button>
+      <button class="btn secondary" id="invPrintBtn">Imprimer</button>
     </div>
 
     <p class="result-count" id="inv-resultCount"></p>
+    <p class="result-count" id="inv-totalValue" style="color:var(--gold);"></p>
 
+    <section class="add-panel" id="invAddPanel" style="display:none;">
+      <h2>Nouvel article</h2>
+      <div class="add-grid">
+        <div class="field"><label>Nom</label><input type="text" id="inv-new-nom" placeholder="Nom de l'article"></div>
+        <div class="field">
+          <label>Catégorie</label>
+          <select id="inv-new-type"></select>
+          <input type="text" id="inv-new-type-autre" placeholder="Préciser la catégorie…" style="margin-top:8px;display:none;">
+        </div>
+        <div class="field"><label>Prix client</label><input type="text" id="inv-new-prix" placeholder="Ex. 150,00$"></div>
+        <div class="field"><label>Prix d'achat</label><input type="text" id="inv-new-prixachat" placeholder="Ex. 80,00$"></div>
+        <div class="field wide"><label>Fournisseurs</label><input type="text" id="inv-new-fournisseurs" placeholder="Ex. Cayo Beach"></div>
+      </div>
+      <p class="auth-error" id="inv-new-error"></p>
+      <div class="add-actions"><button class="btn" id="inv-new-save" type="button">Enregistrer</button></div>
+    </section>
+
+    <div class="table-scroll">
     <div id="invTableHost"></div>
+    </div>
 
     <footer>Umami — usage interne</footer>
   </div>
@@ -663,6 +744,7 @@
     Connecté en tant que <b id="sessionName">—</b>
     <button id="changePwBtn">Changer mon mot de passe</button>
     <button id="manageMembersBtn" style="display:none;">Gérer les membres</button>
+    <button id="histBtn">Historique</button>
     <button id="logoutBtn">Déconnexion</button>
   </div>
 
@@ -683,6 +765,7 @@
       <option value="☠">☠ Blacklist</option>
     </select>
     <button class="btn secondary" id="toggleAdd">+ Ajouter une fiche</button>
+    <button class="btn secondary" id="printBtn">Imprimer</button>
   </div>
 
   <p class="result-count" id="resultCount"></p>
@@ -786,7 +869,9 @@
     </div>
   </section>
 
+  <div class="table-scroll">
   <div id="tableHost"></div>
+  </div>
 
 
 
@@ -822,6 +907,16 @@
     <div class="add-actions"><button class="btn secondary" id="pwPanelClose" type="button">Fermer</button></div>
   </section>
 </div>
+
+<div class="modal-backdrop" id="histPanel" style="display:none;">
+  <section class="members-panel" style="max-width:820px;">
+    <h2>Historique des modifications</h2>
+    <div id="historiqueList" class="hist-list"></div>
+    <div class="add-actions"><button class="btn secondary" id="histPanelClose" type="button">Fermer</button></div>
+  </section>
+</div>
+
+<div id="savingIndicator" class="saving-indicator"></div>
 
 <script>
 const INVENTORY_SEED = [{"nom": "Tea Carson", "type": "Mocktail", "qte": 506, "bar": 7, "restaurant": 499, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "150,00$", "prixAchat": "80,00$", "fournisseurs": "Burning Bush"}, {"nom": "Aurora Tropical", "type": "Mocktail", "qte": 159, "bar": 149, "restaurant": 10, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "250,00$", "prixAchat": "100,00$", "fournisseurs": "Costa Bar"}, {"nom": "Pink Paradise", "type": "Mocktail", "qte": 71, "bar": 38, "restaurant": 27, "boutique": 0, "jardin": 6, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "250,00$", "prixAchat": "150,00$", "fournisseurs": "Cayo Beach"}, {"nom": "Violet Passion", "type": "Mocktail", "qte": 106, "bar": 69, "restaurant": 17, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "300,00$", "prixAchat": "150,00$", "fournisseurs": "Cayo Beach"}, {"nom": "Bora Bora", "type": "Mocktail", "qte": 24, "bar": 6, "restaurant": 18, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "300,00$", "prixAchat": "105,00$", "fournisseurs": "#N/A"}, {"nom": "Pink Virgin Mojito", "type": "Mocktail", "qte": 42, "bar": 24, "restaurant": 18, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "300,00$", "prixAchat": "", "fournisseurs": "Club 77"}, {"nom": "Mystic Bloom", "type": "Mocktail", "qte": 132, "bar": 132, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "350,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Vin Sans Alcool", "type": "Mocktail", "qte": 114, "bar": 69, "restaurant": 25, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "750,00$", "prixAchat": "80,00$", "fournisseurs": ""}, {"nom": "Ice Seed thé", "type": "Mocktail", "qte": 358, "bar": 304, "restaurant": 54, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "400,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Whisky cola", "type": "Verre", "qte": 91, "bar": 91, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "180,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Rhum Cola", "type": "Verre", "qte": 43, "bar": 42, "restaurant": 1, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "190,00$", "prixAchat": "80,00$", "fournisseurs": "Hen House"}, {"nom": "Desert Sunset", "type": "Verre", "qte": 531, "bar": 22, "restaurant": 499, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "0,00$", "fournisseurs": "Burning Bush"}, {"nom": "Irish Coffee", "type": "Verre", "qte": 59, "bar": 25, "restaurant": 25, "boutique": 0, "jardin": 9, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "40,00$", "fournisseurs": "Boat House / Bean Machine"}, {"nom": "Martini", "type": "Verre", "qte": 81, "bar": 34, "restaurant": 27, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "60,00$", "fournisseurs": "Pacific Bluff / Boat House"}, {"nom": "Vin chaud", "type": "Verre", "qte": 35, "bar": 35, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "70,00$", "fournisseurs": "Vignoble"}, {"nom": "Oeil Du Dragon", "type": "Verre", "qte": 951, "bar": 835, "restaurant": 18, "boutique": 88, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "220,00$", "prixAchat": "90,00$", "fournisseurs": "WWI"}, {"nom": "Cosmopolitan", "type": "Verre", "qte": 92, "bar": 56, "restaurant": 26, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "250,00$", "prixAchat": "0,00$", "fournisseurs": "Bahamas Mama / Boat House / Bahamas / Club 77"}, {"nom": "Margarita", "type": "Verre", "qte": 96, "bar": 57, "restaurant": 29, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "250,00$", "prixAchat": "0,00$", "fournisseurs": "Bahamas Mama / Boat House / Bahamas / Club 77"}, {"nom": "Mojito", "type": "Verre", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "", "prixAchat": "", "fournisseurs": ""}, {"nom": "Whisky", "type": "Verre", "qte": 283, "bar": 265, "restaurant": 8, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "250,00$", "prixAchat": "0,00$", "fournisseurs": "Pizzeria / Unicorn / Boat House / Tequilala"}, {"nom": "Orange reveur", "type": "Verre", "qte": 92, "bar": 52, "restaurant": 20, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "300,00$", "prixAchat": "150,00$", "fournisseurs": "Cayo Beach"}, {"nom": "Red Lazy", "type": "Verre", "qte": 111, "bar": 82, "restaurant": 19, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "325,00$", "prixAchat": "0,00$", "fournisseurs": "Cayo Beach"}, {"nom": "Cherry Crush", "type": "Verre", "qte": 108, "bar": 83, "restaurant": 15, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "350,00$", "prixAchat": "100,00$", "fournisseurs": "?"}, {"nom": "Black Beauty", "type": "Verre", "qte": 109, "bar": 79, "restaurant": 20, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "400,00$", "prixAchat": "150,00$", "fournisseurs": "Cayo Beach"}, {"nom": "Moscow Mule", "type": "Verre", "qte": 59, "bar": 25, "restaurant": 24, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "400,00$", "prixAchat": "150,00$", "fournisseurs": "The Lounge"}, {"nom": "Costa Spritz", "type": "Verre", "qte": 87, "bar": 67, "restaurant": 20, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "450,00$", "prixAchat": "200,00$", "fournisseurs": "Costa BAr"}, {"nom": "Polynectar", "type": "Verre", "qte": 53, "bar": 19, "restaurant": 34, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "500,00$", "prixAchat": "200,00$", "fournisseurs": "Costa Bae"}, {"nom": "Caipirinha", "type": "Verre", "qte": 56, "bar": 31, "restaurant": 15, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "500,00$", "prixAchat": "105,00$", "fournisseurs": "Bahamas / Boat House / Pacific Bluff / Vignoble"}, {"nom": "Champagne", "type": "Verre", "qte": 325, "bar": 289, "restaurant": 26, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "500,00$", "prixAchat": "200,00$", "fournisseurs": "Club 77"}, {"nom": "Elixir Automne", "type": "Verre", "qte": 85, "bar": 43, "restaurant": 32, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "500,00$", "prixAchat": "150,00$", "fournisseurs": "#N/A"}, {"nom": "Pink Lady's", "type": "Verre", "qte": 65, "bar": 13, "restaurant": 32, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "600,00$", "prixAchat": "150,00$", "fournisseurs": "Club 77"}, {"nom": "Sauterne", "type": "Verre", "qte": 77, "bar": 43, "restaurant": 15, "boutique": 0, "jardin": 19, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "750,00$", "prixAchat": "105,00$", "fournisseurs": "Vignoble"}, {"nom": "Por Do Sol", "type": "Verre", "qte": 1, "bar": 1, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "1 000,00$", "prixAchat": "150,00$", "fournisseurs": "Favelas Palace Club"}, {"nom": "Café au lait", "type": "Café - Thé", "qte": 232, "bar": 178, "restaurant": 34, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "50,00$", "prixAchat": "25,00$", "fournisseurs": "RIP Bean Coffee (Choco Plaisir)"}, {"nom": "Café noir", "type": "Café - Thé", "qte": 4, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 4, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "50,00$", "prixAchat": "25,00$", "fournisseurs": "Boat House / Bean Machine"}, {"nom": "Chocolat chaud", "type": "Café - Thé", "qte": 64, "bar": 14, "restaurant": 30, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "50,00$", "prixAchat": "30,00$", "fournisseurs": "RIP Bean Coffee (Choco Plaisir)"}, {"nom": "Capuccino", "type": "Café - Thé", "qte": 89, "bar": 51, "restaurant": 18, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "80,00$", "prixAchat": "40,00$", "fournisseurs": "RIP Bean Coffee (Choco Plaisir)"}, {"nom": "Macchiato", "type": "Café - Thé", "qte": 124, "bar": 84, "restaurant": 20, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "80,00$", "prixAchat": "40,00$", "fournisseurs": "Boat House"}, {"nom": "Thé matcha", "type": "Café - Thé", "qte": 41, "bar": 16, "restaurant": 5, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "80,00$", "prixAchat": "0,00$", "fournisseurs": "RIP Noodle Exchange"}, {"nom": "Matcha Latte", "type": "Café - Thé", "qte": 153, "bar": 93, "restaurant": 40, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "130,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Thé lézard", "type": "Café - Thé", "qte": 60, "bar": 28, "restaurant": 12, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "150,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Thé citron", "type": "Café - Thé", "qte": 28, "bar": 0, "restaurant": 8, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "130,00$", "prixAchat": "0,00$", "fournisseurs": "Ice Cream Factory"}, {"nom": "Thé framboise", "type": "Café - Thé", "qte": 28, "bar": 0, "restaurant": 8, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "130,00$", "prixAchat": "0,00$", "fournisseurs": "Ice Cream Factory"}, {"nom": "Thé pêche", "type": "Café - Thé", "qte": 25, "bar": 0, "restaurant": 17, "boutique": 0, "jardin": 8, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "130,00$", "prixAchat": "0,00$", "fournisseurs": "Ice Cream Factory"}, {"nom": "Granité cactus", "type": "Granités", "qte": 234, "bar": 144, "restaurant": 70, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "0,00$", "fournisseurs": "Ice Cream Factory"}, {"nom": "Granité citron", "type": "Granités", "qte": 238, "bar": 137, "restaurant": 81, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "0,00$", "fournisseurs": "Ice Cream Factory"}, {"nom": "Granité fraise", "type": "Granités", "qte": 31, "bar": 0, "restaurant": 21, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "0,00$", "fournisseurs": "Ice Cream Factory"}, {"nom": "Granité myrtille", "type": "Granités", "qte": 148, "bar": 74, "restaurant": 54, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "0,00$", "fournisseurs": "Ice Cream Factory"}, {"nom": "Granité pastèque", "type": "Granités", "qte": 129, "bar": 89, "restaurant": 20, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "0,00$", "fournisseurs": "Ice Cream Factory"}, {"nom": "Granité Tutti Frutti", "type": "Granités", "qte": 178, "bar": 97, "restaurant": 61, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "0,00$", "fournisseurs": "Ice Cream Factory"}, {"nom": "Capri Seum", "type": "Soft", "qte": 278, "bar": 254, "restaurant": 4, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "80,00$", "prixAchat": "0,00$", "fournisseurs": "Cayo Ferme"}, {"nom": "Jus d'ananas", "type": "Soft", "qte": 56, "bar": 0, "restaurant": 36, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "80,00$", "prixAchat": "0,00$", "fournisseurs": "Cayo Ferme"}, {"nom": "Jus de banane", "type": "Soft", "qte": 30, "bar": 0, "restaurant": 10, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "80,00$", "prixAchat": "0,00$", "fournisseurs": "Cayo Ferme"}, {"nom": "Jus de kiwi", "type": "Soft", "qte": 39, "bar": 0, "restaurant": 19, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "80,00$", "prixAchat": "0,00$", "fournisseurs": "Cayo Ferme"}, {"nom": "Jus de litchi", "type": "Soft", "qte": 68, "bar": 0, "restaurant": 48, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "80,00$", "prixAchat": "0,00$", "fournisseurs": "Cayo Ferme"}, {"nom": "Jus de papaye", "type": "Soft", "qte": 67, "bar": 0, "restaurant": 47, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "80,00$", "prixAchat": "0,00$", "fournisseurs": "Cayo Ferme"}, {"nom": "Jus de raisin", "type": "Soft", "qte": 45, "bar": 0, "restaurant": 25, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "80,00$", "prixAchat": "0,00$", "fournisseurs": "Vignoble"}, {"nom": "Milkshake fraise", "type": "Soft", "qte": 14, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 14, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "80,00$", "prixAchat": "0,00$", "fournisseurs": "Chulz Familly"}, {"nom": "Cedrata", "type": "Soft", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "65,00$", "fournisseurs": "Pizzeria"}, {"nom": "Ramune Sakura", "type": "Soft", "qte": 57, "bar": 36, "restaurant": 1, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "0,00$", "fournisseurs": "Caisse Auto"}, {"nom": "Ramune Yuzu", "type": "Soft", "qte": 50, "bar": 30, "restaurant": 0, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "0,00$", "fournisseurs": "Caisse Auto"}, {"nom": "Aloe Vera", "type": "Soft", "qte": 27, "bar": 0, "restaurant": 1, "boutique": 0, "jardin": 26, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "125,00$", "prixAchat": "0,00$", "fournisseurs": "Umami marina"}, {"nom": "Ramune Satsuma", "type": "Soft", "qte": 140, "bar": 106, "restaurant": 0, "boutique": 34, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "180,00$", "prixAchat": "80,00$", "fournisseurs": "WWI"}, {"nom": "Refresha Citron", "type": "Soft", "qte": 14, "bar": 0, "restaurant": 14, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "290,00$", "prixAchat": "150,00$", "fournisseurs": "Hen House"}, {"nom": "Kombuchat", "type": "Soft", "qte": 6, "bar": 0, "restaurant": 0, "boutique": 6, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "", "prixAchat": "", "fournisseurs": ""}, {"nom": "Onryo", "type": "Collection", "qte": 481, "bar": 449, "restaurant": 0, "boutique": 32, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "2 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Oni", "type": "Collection", "qte": 461, "bar": 424, "restaurant": 0, "boutique": 37, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "2 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Krasue", "type": "Collection", "qte": 508, "bar": 472, "restaurant": 0, "boutique": 36, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "2 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Jiangshi", "type": "Collection", "qte": 505, "bar": 466, "restaurant": 0, "boutique": 39, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "2 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Hantu", "type": "Collection", "qte": 506, "bar": 468, "restaurant": 0, "boutique": 38, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "2 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Bracelet Bonheur 1", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "10 000,00$", "prixAchat": "0,00$", "fournisseurs": "WWI"}, {"nom": "Bracelet Bonheur 2", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "10 000,00$", "prixAchat": "0,00$", "fournisseurs": "WWI"}, {"nom": "Honōbōru", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "0,00$", "fournisseurs": "WWI"}, {"nom": "Honōmagu", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "0,00$", "fournisseurs": "WWI"}, {"nom": "Shinryu", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Peluche Honō", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "20 000,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Raitā", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "3 225,00$", "fournisseurs": "#N/A"}, {"nom": "Sakura Bonzai", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "3 500,00$", "fournisseurs": "#N/A"}, {"nom": "UmaKata", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "3 500,00$", "fournisseurs": "#N/A"}, {"nom": "Maneki Dorogon", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "3 500,00$", "fournisseurs": "#N/A"}, {"nom": "Higonokami", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "", "prixAchat": "", "fournisseurs": ""}, {"nom": "Katana Sakura", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "3 500,00$", "fournisseurs": "#N/A"}, {"nom": "Livre Umami", "type": "Collection", "qte": 168, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 168, "prix": "2 000,00$", "prixAchat": "3 500,00$", "fournisseurs": "#N/A"}, {"nom": "PokettoMami", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "", "prixAchat": "", "fournisseurs": ""}, {"nom": "Onigiri-Mi", "type": "Collection", "qte": 21, "bar": 4, "restaurant": 0, "boutique": 17, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Onimami", "type": "Collection", "qte": 4, "bar": 4, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "3 000,00$", "fournisseurs": "WWi"}, {"nom": "Kimekumami", "type": "Collection", "qte": 9, "bar": 9, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "3 000,00$", "fournisseurs": "WWI"}, {"nom": "Kitsune Lunaire", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Kitsune Solaire", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Panda Tendre 1", "type": "Collection", "qte": 41, "bar": 41, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Panda Gracieuse 2", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Panda Déesse des Cerisiers 3", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Panda Joyeux 1", "type": "Collection", "qte": 41, "bar": 41, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Panda Sage 2", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Panda Empereur Céleste 3", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "HonoKurisuma", "type": "Collection", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "15 000,00$", "prixAchat": "2 520,00$", "fournisseurs": "WWI"}, {"nom": "Pass VIP", "type": "Collection", "qte": 138, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 138, "prix": "", "prixAchat": "", "fournisseurs": ""}, {"nom": "Peze Ekiel", "type": "Collection", "qte": 5, "bar": 0, "restaurant": 0, "boutique": 5, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "420,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Burger Panda", "type": "Plat", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "90,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Boisson Panda", "type": "Soft", "qte": 1, "bar": 1, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "90,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Makis", "type": "Entrée", "qte": 51, "bar": 14, "restaurant": 0, "boutique": 174, "jardin": 15, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "50,00$", "prixAchat": "0,00$", "fournisseurs": "Umami Marina"}, {"nom": "Bansō", "type": "Entrée", "qte": 329, "bar": 184, "restaurant": 20, "boutique": 104, "jardin": 21, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "150,00$", "prixAchat": "0,00$", "fournisseurs": "?"}, {"nom": "Jiaozi", "type": "Entrée", "qte": 64, "bar": 31, "restaurant": 18, "boutique": 0, "jardin": 15, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "150,00$", "prixAchat": "0,00$", "fournisseurs": "RIP Noodle Exchange"}, {"nom": "Yakitori fromage", "type": "Entrée", "qte": 20, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "150,00$", "prixAchat": "0,00$", "fournisseurs": "RIP Noodle Exchange"}, {"nom": "Edamame", "type": "Entrée", "qte": 1560, "bar": 1163, "restaurant": 242, "boutique": 135, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "180,00$", "prixAchat": "60,00$", "fournisseurs": "WWI"}, {"nom": "Kaiseki", "type": "Entrée", "qte": 1166, "bar": 1132, "restaurant": 12, "boutique": 22, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "180,00$", "prixAchat": "70,00$", "fournisseurs": ""}, {"nom": "Gourmet Mix", "type": "Entrée", "qte": 124, "bar": 5, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "100,00$", "fournisseurs": "Cayo Beach"}, {"nom": "Foie Gras", "type": "Entrée", "qte": 60, "bar": 40, "restaurant": 0, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "120,00$", "prixAchat": "0,00$", "fournisseurs": "Umami Marina"}, {"nom": "Toast Saumon", "type": "Entrée", "qte": 20, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "300,00$", "prixAchat": "100,00$", "fournisseurs": "RIP Pearls"}, {"nom": "Trésor Atlantique", "type": "Entrée", "qte": 20, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "250,00$", "prixAchat": "0,00$", "fournisseurs": "RIP Pearls"}, {"nom": "Caviar", "type": "Entrée", "qte": 90, "bar": 71, "restaurant": 0, "boutique": 0, "jardin": 19, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "500,00$", "prixAchat": "0,00$", "fournisseurs": "RIP Pearls"}, {"nom": "Makijuana", "type": "Entrée", "qte": 159, "bar": 118, "restaurant": 4, "boutique": 17, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "600,00$", "prixAchat": "230,00$", "fournisseurs": "Ld Organics"}, {"nom": "Bao poulet", "type": "Plat", "qte": 10, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "150,00$", "prixAchat": "70,00$", "fournisseurs": "RIP Noodle Exchange"}, {"nom": "Bateau de sushis", "type": "Plat", "qte": 156, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 156, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "150,00$", "prixAchat": "40,00$", "fournisseurs": "Umami Marina"}, {"nom": "Bento (Teddy)", "type": "Plat", "qte": 7, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 7, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "150,00$", "prixAchat": "0,00$", "fournisseurs": "Ice Cream Factory"}, {"nom": "Porc au caramel", "type": "Plat", "qte": 14, "bar": 0, "restaurant": 4, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "150,00$", "prixAchat": "40,00$", "fournisseurs": "Caisse Auto"}, {"nom": "Riz cantonais", "type": "Plat", "qte": 21, "bar": 0, "restaurant": 0, "boutique": 2, "jardin": 19, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "150,00$", "prixAchat": "45,00$", "fournisseurs": "Umami Marina"}, {"nom": "Curry Japonais", "type": "Plat", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "0,00$", "fournisseurs": "?"}, {"nom": "Poulet Karaage", "type": "Plat", "qte": 1, "bar": 0, "restaurant": 1, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Gunshoku", "type": "Plat", "qte": 991, "bar": 773, "restaurant": 144, "boutique": 54, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "80,00$", "fournisseurs": "WWI"}, {"nom": "Takoyaki", "type": "Plat", "qte": 1078, "bar": 660, "restaurant": 329, "boutique": 69, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "240,00$", "prixAchat": "80,00$", "fournisseurs": ""}, {"nom": "Boeuf Wagyu", "type": "Plat", "qte": 527, "bar": 412, "restaurant": 3, "boutique": 92, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "250,00$", "prixAchat": "80,00$", "fournisseurs": "?"}, {"nom": "Entrecôte", "type": "Plat", "qte": 20, "bar": 0, "restaurant": 4, "boutique": 0, "jardin": 16, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "250,00$", "prixAchat": "80,00$", "fournisseurs": "The Lounge"}, {"nom": "Plateau fruits de mer", "type": "Plat", "qte": 20, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "250,00$", "prixAchat": "80,00$", "fournisseurs": "RIP Pearls"}, {"nom": "St-Pierre", "type": "Plat", "qte": 20, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "300,00$", "prixAchat": "100,00$", "fournisseurs": "RIP Pearls"}, {"nom": "Milanaise", "type": "Plat", "qte": 0, "bar": 76, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "320,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Sashimi Fugu", "type": "Plat", "qte": 1616, "bar": 1505, "restaurant": 38, "boutique": 54, "jardin": 19, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "1 000,00$", "prixAchat": "60,00$", "fournisseurs": "#N/A"}, {"nom": "Kaiseki Royale", "type": "Plat", "qte": 2022, "bar": 1977, "restaurant": 7, "boutique": 38, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "180,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Matsuri Mix", "type": "Plat", "qte": 19, "bar": 6, "restaurant": 13, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "", "prixAchat": "", "fournisseurs": ""}, {"nom": "Ananas", "type": "Dessert", "qte": 14, "bar": 0, "restaurant": 14, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "25,00$", "prixAchat": "10,00$", "fournisseurs": "Cayo Ferme"}, {"nom": "Banane", "type": "Dessert", "qte": 1, "bar": 1, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "25,00$", "prixAchat": "10,00$", "fournisseurs": "Cayo Ferme"}, {"nom": "Kiwi", "type": "Dessert", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "25,00$", "prixAchat": "10,00$", "fournisseurs": "Cayo Ferme"}, {"nom": "Litchi", "type": "Dessert", "qte": 3, "bar": 0, "restaurant": 3, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "25,00$", "prixAchat": "10,00$", "fournisseurs": "Cayo Ferme"}, {"nom": "Papaye", "type": "Dessert", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "25,00$", "prixAchat": "10,00$", "fournisseurs": "Cayo Ferme"}, {"nom": "Donuts", "type": "Dessert", "qte": 20, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "60,00$", "prixAchat": "30,00$", "fournisseurs": "Burger Shot Nord"}, {"nom": "Cookie", "type": "Dessert", "qte": 20, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "75,00$", "prixAchat": "30,00$", "fournisseurs": "Burger Shot Nord"}, {"nom": "Mochis glacés", "type": "Dessert", "qte": 35, "bar": 0, "restaurant": 0, "boutique": 16, "jardin": 19, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "0,00$", "fournisseurs": "Caisse Auto"}, {"nom": "Tablette de chocolat", "type": "Dessert", "qte": 20, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Tiramisu", "type": "Dessert", "qte": 142, "bar": 114, "restaurant": 8, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "0,00$", "fournisseurs": "pizza this"}, {"nom": "Tartelette Framboise", "type": "Dessert", "qte": 30, "bar": 0, "restaurant": 10, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "0,00$", "fournisseurs": "?"}, {"nom": "Salade Fraises", "type": "Dessert", "qte": 20, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "120,00$", "prixAchat": "0,00$", "fournisseurs": "Ltd Little Seoul"}, {"nom": "Fruit Rouge", "type": "Dessert", "qte": 19, "bar": 0, "restaurant": 3, "boutique": 0, "jardin": 16, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "120,00$", "prixAchat": "10,00$", "fournisseurs": "RIP Hot Grim"}, {"nom": "Khao Niao Mangue", "type": "Dessert", "qte": 10, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "150,00$", "prixAchat": "0,00$", "fournisseurs": "RIP Noodle Exchange"}, {"nom": "Yuebing", "type": "Dessert", "qte": 24, "bar": 4, "restaurant": 0, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "150,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Coupe ananas", "type": "Dessert", "qte": 185, "bar": 159, "restaurant": 6, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "0,00$", "fournisseurs": "?"}, {"nom": "Coupe noix de coco", "type": "Dessert", "qte": 179, "bar": 147, "restaurant": 13, "boutique": 0, "jardin": 19, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "0,00$", "fournisseurs": "?"}, {"nom": "Coupe pastèque", "type": "Dessert", "qte": 43, "bar": 10, "restaurant": 13, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "0,00$", "fournisseurs": "?"}, {"nom": "Panna Cotta F. Bois", "type": "Dessert", "qte": 123, "bar": 91, "restaurant": 6, "boutique": 6, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Panna Cotta F. Dragon", "type": "Dessert", "qte": 126, "bar": 77, "restaurant": 7, "boutique": 22, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Panna Cotta Mangue", "type": "Dessert", "qte": 139, "bar": 78, "restaurant": 35, "boutique": 6, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Taiyaki Dragon", "type": "Dessert", "qte": 465, "bar": 309, "restaurant": 118, "boutique": 18, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Dragonut", "type": "Dessert", "qte": 17, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 17, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "220,00$", "prixAchat": "100,00$", "fournisseurs": "WWI Via Oh My Donut's & Cook"}, {"nom": "Tarte fraises", "type": "Dessert", "qte": 5, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 5, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "450,00$", "prixAchat": "0,00$", "fournisseurs": "?"}, {"nom": "Kori sakura", "type": "Alcool", "qte": 1253, "bar": 1241, "restaurant": 6, "boutique": 6, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "300,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Liqueur chocolat", "type": "Alcool", "qte": 35, "bar": 17, "restaurant": 10, "boutique": 0, "jardin": 8, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "300,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Bacanora", "type": "Alcool", "qte": 569, "bar": 524, "restaurant": 25, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "350,00$", "prixAchat": "0,00$", "fournisseurs": "RIP Grapeseed Pub"}, {"nom": "Limoncello", "type": "Alcool", "qte": 128, "bar": 79, "restaurant": 29, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "350,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Tequila", "type": "Alcool", "qte": 436, "bar": 349, "restaurant": 67, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "350,00$", "prixAchat": "80,00$", "fournisseurs": "Tequilala / Boat House"}, {"nom": "Gin anglais", "type": "Alcool", "qte": 259, "bar": 227, "restaurant": 14, "boutique": 0, "jardin": 18, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "400,00$", "prixAchat": "0,00$", "fournisseurs": "Yellow Jack / Bean Machine / Boat House / Club 77"}, {"nom": "Rhum arrangé (maison)", "type": "Alcool", "qte": 267, "bar": 227, "restaurant": 20, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "400,00$", "prixAchat": "0,00$", "fournisseurs": "Club 77"}, {"nom": "Shimizu Peach", "type": "Alcool", "qte": 67, "bar": 29, "restaurant": 20, "boutique": 0, "jardin": 18, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "400,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Vodka", "type": "Alcool", "qte": 153, "bar": 127, "restaurant": 0, "boutique": 6, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "400,00$", "prixAchat": "0,00$", "fournisseurs": "Bahamas Mama"}, {"nom": "Coyote Rider", "type": "Alcool", "qte": 44, "bar": 29, "restaurant": 15, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "400,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Whisky Bouteille", "type": "Alcool", "qte": 409, "bar": 339, "restaurant": 50, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "400,00$", "prixAchat": "80,00$", "fournisseurs": "RIP Unicorn"}, {"nom": "Honey Seed", "type": "Alcool", "qte": 363, "bar": 271, "restaurant": 22, "boutique": 50, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "450,00$", "prixAchat": "0,00$", "fournisseurs": "Grapeseed Pub"}, {"nom": "Mezcal", "type": "Alcool", "qte": 425, "bar": 381, "restaurant": 24, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "450,00$", "prixAchat": "0,00$", "fournisseurs": "Cayo Beach / Boat House"}, {"nom": "Tequila Volcan", "type": "Alcool", "qte": 203, "bar": 168, "restaurant": 15, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "500,00$", "prixAchat": "50,00$", "fournisseurs": "#N/A"}, {"nom": "Red Dragon", "type": "Alcool", "qte": 289, "bar": 171, "restaurant": 85, "boutique": 13, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "600,00$", "prixAchat": "0,00$", "fournisseurs": "Red Lion"}, {"nom": "Vin de serpent", "type": "Alcool", "qte": 35, "bar": 0, "restaurant": 15, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "600,00$", "prixAchat": "0,00$", "fournisseurs": "RIP Noodle Exchange"}, {"nom": "Rhum pirate", "type": "Alcool", "qte": 34, "bar": 0, "restaurant": 14, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "750,00$", "prixAchat": "150,00$", "fournisseurs": "Cayo CIgare"}, {"nom": "Vin de Riz", "type": "Alcool", "qte": 61, "bar": 41, "restaurant": 20, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "750,00$", "prixAchat": "350,00$", "fournisseurs": ""}, {"nom": "Absinthe", "type": "Alcool", "qte": 85, "bar": 51, "restaurant": 14, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "800,00$", "prixAchat": "0,00$", "fournisseurs": "Boat House"}, {"nom": "Amphore", "type": "Alcool", "qte": 47, "bar": 27, "restaurant": 20, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "800,00$", "prixAchat": "350,00$", "fournisseurs": ""}, {"nom": "Vin de CBD", "type": "Alcool", "qte": 75, "bar": 51, "restaurant": 24, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "800,00$", "prixAchat": "350,00$", "fournisseurs": ""}, {"nom": "Vin de Glace", "type": "Alcool", "qte": 92, "bar": 72, "restaurant": 20, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "850,00$", "prixAchat": "350,00$", "fournisseurs": ""}, {"nom": "Vodka Bounty", "type": "Alcool", "qte": 30, "bar": 0, "restaurant": 10, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "900,00$", "prixAchat": "300,00$", "fournisseurs": "The Lounge"}, {"nom": "Bagheera (Mezcal)", "type": "Alcool", "qte": 110, "bar": 82, "restaurant": 24, "boutique": 0, "jardin": 4, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "1 000,00$", "prixAchat": "300,00$", "fournisseurs": "Cayo Beach"}, {"nom": "Costa Pirata", "type": "Alcool", "qte": 44, "bar": 34, "restaurant": 10, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "2 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Saké Fuji", "type": "Alcool", "qte": 1435, "bar": 1375, "restaurant": 5, "boutique": 35, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "1 200,00$", "prixAchat": "85,00$", "fournisseurs": "?"}, {"nom": "Lunatix", "type": "Alcool", "qte": 20, "bar": 0, "restaurant": 10, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "2 000,00$", "prixAchat": "600,00$", "fournisseurs": "#N/A"}, {"nom": "Vermella", "type": "Alcool", "qte": 84, "bar": 54, "restaurant": 10, "boutique": 0, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "2 000,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Sauterne Bouteille", "type": "Alcool", "qte": 95, "bar": 61, "restaurant": 24, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "2 250,00$", "prixAchat": "350,00$", "fournisseurs": "Vignoble"}, {"nom": "Umeshu", "type": "Alcool", "qte": 201, "bar": 117, "restaurant": 45, "boutique": 30, "jardin": 9, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "2 500,00$", "prixAchat": "250,00$", "fournisseurs": "Vignoble"}, {"nom": "Burning's Dragon", "type": "Alcool", "qte": 29, "bar": 14, "restaurant": 0, "boutique": 0, "jardin": 15, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "3 000,00$", "prixAchat": "350,00$", "fournisseurs": "?"}, {"nom": "Cachaça", "type": "Alcool", "qte": 25, "bar": 0, "restaurant": 0, "boutique": 25, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "2 800,00$", "prixAchat": "500,00$", "fournisseurs": ""}, {"nom": "Champagne Fraise", "type": "Alcool", "qte": 49, "bar": 25, "restaurant": 14, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "3 000,00$", "prixAchat": "0,00$", "fournisseurs": "Pacific Bluff"}, {"nom": "Champagne Rosé", "type": "Alcool", "qte": 9, "bar": 0, "restaurant": 9, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "3 000,00$", "prixAchat": "350,00$", "fournisseurs": "#N/A"}, {"nom": "Grand Cru", "type": "Alcool", "qte": 65, "bar": 46, "restaurant": 0, "boutique": 0, "jardin": 19, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "3 000,00$", "prixAchat": "350,00$", "fournisseurs": "Vignobles / Boat House / Vignoble"}, {"nom": "Segredo De Favela", "type": "Alcool", "qte": 39, "bar": 29, "restaurant": 10, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "3 000,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Abyssale", "type": "Alcool", "qte": 33, "bar": 27, "restaurant": 6, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "3 500,00$", "prixAchat": "350,00$", "fournisseurs": ""}, {"nom": "Magnum de Champagne", "type": "Alcool", "qte": 60, "bar": 21, "restaurant": 21, "boutique": 0, "jardin": 18, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "6 000,00$", "prixAchat": "315,00$", "fournisseurs": "Boat House"}, {"nom": "Tequila Corralejo", "type": "Alcool", "qte": 123, "bar": 91, "restaurant": 15, "boutique": 0, "jardin": 17, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "9 000,00$", "prixAchat": "125,00$", "fournisseurs": "#N/A"}, {"nom": "Redwood", "type": "Fumette", "qte": 641, "bar": 553, "restaurant": 62, "boutique": 6, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "60,00$", "prixAchat": "0,00$", "fournisseurs": "Métier Tabac"}, {"nom": "Debonnaire", "type": "Fumette", "qte": 284, "bar": 251, "restaurant": 7, "boutique": 6, "jardin": 20, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "60,00$", "prixAchat": "50,00$", "fournisseurs": "Métier Tabac"}, {"nom": "Cigarette CBD", "type": "Fumette", "qte": 446, "bar": 409, "restaurant": 20, "boutique": 6, "jardin": 11, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "50,00$", "fournisseurs": "Greenvalley"}, {"nom": "Skunk 2%", "type": "Fumette", "qte": 110, "bar": 57, "restaurant": 40, "boutique": 0, "jardin": 13, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "150,00$", "prixAchat": "75,00$", "fournisseurs": "Ld Organics"}, {"nom": "Cigare de Cayo", "type": "Fumette", "qte": 305, "bar": 286, "restaurant": 1, "boutique": 0, "jardin": 18, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "80,00$", "fournisseurs": "Cigare Cayo"}, {"nom": "AK-47 %2", "type": "Fumette", "qte": 50, "bar": 28, "restaurant": 0, "boutique": 0, "jardin": 22, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "300,00$", "prixAchat": "100,00$", "fournisseurs": "Ld Organics"}, {"nom": "Purple Haze 2%", "type": "Fumette", "qte": 86, "bar": 51, "restaurant": 19, "boutique": 0, "jardin": 16, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "350,00$", "prixAchat": "125,00$", "fournisseurs": "Ld Organics"}, {"nom": "Dragon Haze", "type": "Fumette", "qte": 852, "bar": 813, "restaurant": 1, "boutique": 38, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "350,00$", "prixAchat": "", "fournisseurs": ""}, {"nom": "Dragon smoke", "type": "Fumette", "qte": 420, "bar": 289, "restaurant": 53, "boutique": 68, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "400,00$", "prixAchat": "118,00$", "fournisseurs": "Burning Bush"}, {"nom": "OG-Kush 2%", "type": "Fumette", "qte": 80, "bar": 49, "restaurant": 21, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "400,00$", "prixAchat": "160,00$", "fournisseurs": "Ld Organics"}, {"nom": "Amnésia 2%", "type": "Fumette", "qte": 93, "bar": 83, "restaurant": 0, "boutique": 0, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "450,00$", "prixAchat": "180,00$", "fournisseurs": "Ld Organics"}, {"nom": "Red Kush 2%", "type": "Fumette", "qte": 31, "bar": 9, "restaurant": 6, "boutique": 6, "jardin": 10, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "500,00$", "prixAchat": "200,00$", "fournisseurs": "Ld Organics"}, {"nom": "Bidon d'essence", "type": "Divers", "qte": 592, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 592, "prix": "0,00$", "prixAchat": "90,00$", "fournisseurs": "Globe Oil"}, {"nom": "Menu Boeuf", "type": "Divers", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "65,00$", "prixAchat": "65,00$", "fournisseurs": "#N/A"}, {"nom": "Menu Poisson", "type": "Divers", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Menu Poulet", "type": "Divers", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Soda Burger Shot", "type": "Divers", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Soda Horny's", "type": "Divers", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "65,00$", "prixAchat": "65,00$", "fournisseurs": "#N/A"}, {"nom": "Bloc-notes", "type": "Divers", "qte": 25, "bar": 25, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "?"}, {"nom": "Pizza", "type": "Divers", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "pizza this"}, {"nom": "Radio", "type": "Divers", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Sac à dos femme", "type": "Divers", "qte": 1, "bar": 1, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Sac à dos homme", "type": "Divers", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Médaille or", "type": "Divers", "qte": 5, "bar": 0, "restaurant": 5, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Médaille argent", "type": "Divers", "qte": 4, "bar": 0, "restaurant": 4, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Médaille bronze", "type": "Divers", "qte": 5, "bar": 0, "restaurant": 5, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Coupe", "type": "Divers", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "?"}, {"nom": "Masque chirurgicaux", "type": "Divers", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Masque à gaz", "type": "Divers", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Ticket à gratter", "type": "Divers", "qte": 64, "bar": 64, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "150,00$", "prixAchat": "30,00$", "fournisseurs": "#N/A"}, {"nom": "Bateau de sushis PR", "type": "Entrée", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "47,50$", "prixAchat": "40,00$", "fournisseurs": "Umami Marina"}, {"nom": "Poulet Karaage PR", "type": "Plat", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "55,00$", "prixAchat": "35,00$", "fournisseurs": "#N/A"}, {"nom": "Aloe Vera PR", "type": "Soft", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "47,50$", "prixAchat": "30,00$", "fournisseurs": "Umami marina"}, {"nom": "Thon rouge", "type": "Création Menu", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "100,00$", "fournisseurs": "#N/A"}, {"nom": "Makis", "type": "Création Menu", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "0,00$", "fournisseurs": "Umami Marina"}, {"nom": "Vin", "type": "Création Menu", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "15,00$", "fournisseurs": "Vignoble"}, {"nom": "Filet Poulet", "type": "Création Menu", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "15,00$", "fournisseurs": "Abattoir"}, {"nom": "Piment", "type": "Création Menu", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "10,00$", "fournisseurs": "#N/A"}, {"nom": "Ananas", "type": "Création Menu", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "10,00$", "fournisseurs": "Cayo Ferme"}, {"nom": "Sprunk", "type": "Création Menu", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "40,00$", "fournisseurs": "Caisse Auto / RIP Noodle Exchange / Linterna"}, {"nom": "Litchi", "type": "Création Menu", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "10,00$", "fournisseurs": "Cayo Ferme"}, {"nom": "Papaye", "type": "Création Menu", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "0,00$", "prixAchat": "10,00$", "fournisseurs": "Cayo Ferme"}, {"nom": "Spéculoos", "type": "Déstock", "qte": 89, "bar": 89, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "50,00$", "prixAchat": "10,00$", "fournisseurs": "RIP Speculosantos"}, {"nom": "St Pierre", "type": "Déstock", "qte": 63, "bar": 63, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "100,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}, {"nom": "Tresor de l atlantique", "type": "Déstock", "qte": 0, "bar": 0, "restaurant": 0, "boutique": 0, "jardin": 0, "chicha": 0, "cuisine": 0, "reserve": 0, "prix": "200,00$", "prixAchat": "0,00$", "fournisseurs": "#N/A"}];
@@ -901,17 +996,78 @@ function render(){
 
   host.querySelectorAll('td.del button').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
+      if(!confirm('Supprimer cette fiche ? Cette action est irréversible.')) return;
       const key = btn.getAttribute('data-key');
       const tab = btn.getAttribute('data-tab');
       const arr = tab === 'main' ? customMain : tab === 'actif' ? customActive : customBl;
       const idx = arr.findIndex((_,i)=> ('c'+tab+i) === key);
       if(idx > -1){
+        const removed = arr[idx];
         arr.splice(idx,1);
         await persist(tab);
+        logAction('Suppression fiche', removed.nom + ' (' + tab + ')');
         render();
       }
     });
   });
+}
+
+/* ---- Indicateur de sauvegarde ---- */
+let savingCount = 0;
+function showSaving(){
+  savingCount++;
+  const el = document.getElementById('savingIndicator');
+  if(el){ el.textContent = 'Sauvegarde…'; el.className = 'saving-indicator show saving'; }
+}
+function hideSaving(){
+  savingCount = Math.max(0, savingCount - 1);
+  const el = document.getElementById('savingIndicator');
+  if(!el) return;
+  if(savingCount === 0){
+    el.textContent = 'Enregistré ✓';
+    el.className = 'saving-indicator show saved';
+    setTimeout(()=>{ el.className = 'saving-indicator'; }, 1600);
+  }
+}
+
+/* ---- Historique des modifications ---- */
+function historiqueRef(){
+  return db ? db.ref((currentApp === 'inventaire' ? 'inventaire' : 'registre') + '/historique') : null;
+}
+async function logAction(action, details){
+  const ref = historiqueRef();
+  if(!ref) return;
+  try{
+    await ref.push({
+      ts: Date.now(),
+      user: (currentUser && currentUser.nom) || 'Inconnu',
+      action, details: details || ''
+    });
+  }catch(e){ console.error('Erreur historique', e); }
+}
+async function renderHistorique(){
+  const host = document.getElementById('historiqueList');
+  const ref = historiqueRef();
+  if(!ref){ host.innerHTML = '<p class="hint">Pas de connexion.</p>'; return; }
+  try{
+    const snap = await ref.orderByChild('ts').limitToLast(80).once('value');
+    const val = snap.val() || {};
+    const entries = Object.values(val).sort((a,b)=>b.ts-a.ts);
+    if(entries.length === 0){
+      host.innerHTML = '<p class="hint">Aucune modification enregistrée pour le moment.</p>';
+      return;
+    }
+    host.innerHTML = entries.map(e=>{
+      const d = new Date(e.ts);
+      const dateStr = d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+      return '<div class="hist-row"><span class="hist-date">' + dateStr + '</span>' +
+        '<span class="hist-user">' + escapeHtml(e.user) + '</span>' +
+        '<span class="hist-action">' + escapeHtml(e.action) + '</span>' +
+        '<span class="hist-details">' + escapeHtml(e.details||'') + '</span></div>';
+    }).join('');
+  }catch(e){
+    host.innerHTML = '<p class="hint">Erreur de chargement de l&#39;historique.</p>';
+  }
 }
 
 let firebaseReady = false;
@@ -983,6 +1139,10 @@ let invItems = [];
 let invActiveCat = null;
 let invSearchTerm = '';
 let invInitialized = false;
+let invSortField = null;
+let invSortDir = 1;
+
+const MIN_THRESHOLDS = { bar:20, restaurant:20, boutique:20, jardin:10, chicha:10, cuisine:10, reserve:10 };
 
 function catSlug(cat){
   return 'cat-' + cat.toLowerCase()
@@ -1011,6 +1171,16 @@ function invCategories(){
   });
 }
 
+function parsePrice(str){
+  if(!str) return 0;
+  const cleaned = String(str).replace(/[^0-9,.-]/g, '').replace(',', '.');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+function formatMoney(n){
+  return n.toLocaleString('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:2}) + '$';
+}
+
 function renderInvTabs(){
   const nav = document.getElementById('invTabs');
   const cats = invCategories();
@@ -1030,31 +1200,55 @@ function renderInvTabs(){
 
 async function persistInventory(){
   if(!db) return;
+  showSaving();
   try{
     await db.ref('inventaire/items').set(invItems);
   }catch(e){
     console.error('Erreur de sauvegarde inventaire', e);
+  }finally{
+    hideSaving();
   }
 }
 
-function invNumberField(index, field, value){
-  return '<input type="number" class="inv-edit" data-index="' + index + '" data-field="' + field + '" value="' + value + '">';
+function invNumberField(index, field, value, isLow){
+  return '<input type="number" class="inv-edit' + (isLow?' inv-low':'') + '" data-index="' + index + '" data-field="' + field + '" value="' + value + '">';
 }
 function invTextField(index, field, value){
   return '<input type="text" class="inv-edit" data-index="' + index + '" data-field="' + field + '" value="' + escapeHtml(value) + '">';
 }
 
+const INV_SORT_LABELS = {
+  nom:'Article', type:'Catégorie', qte:'Total', bar:'Bar', restaurant:'Restaurant',
+  boutique:'Boutique', jardin:'Jardin', chicha:'Chicha', cuisine:'Cuisine', reserve:'Réserve',
+  prix:'Prix client', prixAchat:'Prix achat', fournisseurs:'Fournisseurs'
+};
+
 function renderInvTable(){
   const term = invSearchTerm.trim().toLowerCase();
   const indexed = invItems.map((it, idx)=>({it, idx}));
-  const filtered = indexed.filter(({it})=>{
+  let filtered = indexed.filter(({it})=>{
     if(invActiveCat && it.type !== invActiveCat) return false;
     if(!term) return true;
     const hay = [it.nom, it.type, it.fournisseurs].join(' ').toLowerCase();
     return hay.includes(term);
   });
 
+  if(invSortField){
+    filtered = filtered.slice().sort((a,b)=>{
+      let va = a.it[invSortField], vb = b.it[invSortField];
+      if(invSortField === 'prix' || invSortField === 'prixAchat'){ va = parsePrice(va); vb = parsePrice(vb); }
+      if(typeof va === 'string'){ va = va.toLowerCase(); vb = (vb||'').toLowerCase(); }
+      if(va < vb) return -1 * invSortDir;
+      if(va > vb) return 1 * invSortDir;
+      return 0;
+    });
+  }
+
   document.getElementById('inv-resultCount').textContent = filtered.length + ' article' + (filtered.length>1?'s':'') + ' affiché' + (filtered.length>1?'s':'');
+
+  // Valeur totale du stock pour la sélection actuelle
+  const totalValue = filtered.reduce((sum, {it})=> sum + parsePrice(it.prixAchat) * (it.qte||0), 0);
+  document.getElementById('inv-totalValue').textContent = "Valeur du stock (prix d'achat) : " + formatMoney(totalValue);
 
   const host = document.getElementById('invTableHost');
   if(filtered.length === 0){
@@ -1062,30 +1256,43 @@ function renderInvTable(){
     return;
   }
 
-  let html = '<table><thead><tr>' +
-    '<th>Article</th><th>Catégorie</th><th>Total</th><th>Bar</th><th>Restaurant</th><th>Boutique</th>' +
-    '<th>Jardin</th><th>Chicha</th><th>Cuisine</th><th>Réserve</th><th>Prix client</th><th>Prix achat</th><th>Fournisseurs</th>' +
-    '</tr></thead><tbody>';
+  const cols = ['nom','type','qte','bar','restaurant','boutique','jardin','chicha','cuisine','reserve','prix','prixAchat','fournisseurs'];
+  let html = '<table><thead><tr>';
+  cols.forEach(c=>{
+    const arrow = invSortField===c ? (invSortDir===1?' ▲':' ▼') : '';
+    html += '<th class="sortable" data-sort="' + c + '">' + INV_SORT_LABELS[c] + arrow + '</th>';
+  });
+  html += '<th></th></tr></thead><tbody>';
 
   filtered.forEach(({it, idx})=>{
     html += '<tr>' +
       '<td class="nom">' + escapeHtml(it.nom) + '</td>' +
       '<td class="inv-cat ' + catSlug(it.type) + '">' + escapeHtml(it.type) + '</td>' +
       '<td>' + it.qte + '</td>' +
-      '<td>' + invNumberField(idx, 'bar', it.bar) + '</td>' +
-      '<td>' + invNumberField(idx, 'restaurant', it.restaurant) + '</td>' +
-      '<td>' + invNumberField(idx, 'boutique', it.boutique) + '</td>' +
-      '<td>' + invNumberField(idx, 'jardin', it.jardin) + '</td>' +
-      '<td>' + invNumberField(idx, 'chicha', it.chicha) + '</td>' +
-      '<td>' + invNumberField(idx, 'cuisine', it.cuisine) + '</td>' +
-      '<td>' + invNumberField(idx, 'reserve', it.reserve) + '</td>' +
+      '<td>' + invNumberField(idx, 'bar', it.bar, it.bar < MIN_THRESHOLDS.bar) + '</td>' +
+      '<td>' + invNumberField(idx, 'restaurant', it.restaurant, it.restaurant < MIN_THRESHOLDS.restaurant) + '</td>' +
+      '<td>' + invNumberField(idx, 'boutique', it.boutique, it.boutique < MIN_THRESHOLDS.boutique) + '</td>' +
+      '<td>' + invNumberField(idx, 'jardin', it.jardin, it.jardin < MIN_THRESHOLDS.jardin) + '</td>' +
+      '<td>' + invNumberField(idx, 'chicha', it.chicha, it.chicha < MIN_THRESHOLDS.chicha) + '</td>' +
+      '<td>' + invNumberField(idx, 'cuisine', it.cuisine, it.cuisine < MIN_THRESHOLDS.cuisine) + '</td>' +
+      '<td>' + invNumberField(idx, 'reserve', it.reserve, it.reserve < MIN_THRESHOLDS.reserve) + '</td>' +
       '<td>' + invTextField(idx, 'prix', it.prix) + '</td>' +
       '<td>' + invTextField(idx, 'prixAchat', it.prixAchat) + '</td>' +
       '<td class="role">' + escapeHtml(it.fournisseurs) + '</td>' +
+      '<td class="del"><button data-idx="' + idx + '" title="Supprimer">✕</button></td>' +
       '</tr>';
   });
   html += '</tbody></table>';
   host.innerHTML = html;
+
+  host.querySelectorAll('th.sortable').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const field = th.getAttribute('data-sort');
+      if(invSortField === field){ invSortDir *= -1; }
+      else{ invSortField = field; invSortDir = 1; }
+      renderInvTable();
+    });
+  });
 
   host.querySelectorAll('.inv-edit').forEach(input=>{
     input.addEventListener('change', async ()=>{
@@ -1093,12 +1300,27 @@ function renderInvTable(){
       const field = input.getAttribute('data-field');
       let value = input.value;
       if(input.type === 'number') value = parseInt(value, 10) || 0;
+      const oldVal = invItems[idx][field];
       invItems[idx][field] = value;
       if(['bar','restaurant','boutique','jardin','chicha','cuisine','reserve'].includes(field)){
         const it = invItems[idx];
         it.qte = (it.bar||0) + (it.restaurant||0) + (it.boutique||0) + (it.jardin||0) + (it.chicha||0) + (it.cuisine||0) + (it.reserve||0);
       }
       await persistInventory();
+      logAction('Modification stock', invItems[idx].nom + ' — ' + INV_SORT_LABELS[field] + ' : ' + oldVal + ' → ' + value);
+      renderInvTabs();
+      renderInvTable();
+    });
+  });
+
+  host.querySelectorAll('td.del button').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm("Supprimer cet article de l'inventaire ?")) return;
+      const idx = parseInt(btn.getAttribute('data-idx'), 10);
+      const removed = invItems[idx];
+      invItems.splice(idx, 1);
+      await persistInventory();
+      logAction('Suppression article', removed.nom);
       renderInvTabs();
       renderInvTable();
     });
@@ -1125,6 +1347,51 @@ async function loadInventoryItems(){
     invItems = INVENTORY_SEED.slice();
   }
 }
+
+document.getElementById('invAddBtn').addEventListener('click', ()=>{
+  const panel = document.getElementById('invAddPanel');
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? 'block' : 'none';
+  if(opening){
+    const catSel = document.getElementById('inv-new-type');
+    catSel.innerHTML = invCategories().map(c=>'<option value="'+escapeHtml(c)+'">'+escapeHtml(c)+'</option>').join('') +
+      '<option value="__autre__">Autre (préciser)</option>';
+    panel.scrollIntoView({behavior:'smooth', block:'start'});
+  }
+});
+
+document.getElementById('inv-new-type').addEventListener('change', (e)=>{
+  const autre = document.getElementById('inv-new-type-autre');
+  autre.style.display = e.target.value === '__autre__' ? 'block' : 'none';
+});
+
+document.getElementById('inv-new-save').addEventListener('click', async ()=>{
+  const nom = document.getElementById('inv-new-nom').value.trim();
+  const typeSel = document.getElementById('inv-new-type').value;
+  const type = typeSel === '__autre__' ? document.getElementById('inv-new-type-autre').value.trim() : typeSel;
+  const errEl = document.getElementById('inv-new-error');
+  errEl.textContent = '';
+  if(!nom || !type){
+    errEl.textContent = 'Nom et catégorie requis.';
+    return;
+  }
+  const newItem = {
+    nom, type,
+    bar:0, restaurant:0, boutique:0, jardin:0, chicha:0, cuisine:0, reserve:0, qte:0,
+    prix: document.getElementById('inv-new-prix').value.trim(),
+    prixAchat: document.getElementById('inv-new-prixachat').value.trim(),
+    fournisseurs: document.getElementById('inv-new-fournisseurs').value.trim()
+  };
+  invItems.push(newItem);
+  await persistInventory();
+  logAction('Ajout article', nom + ' (' + type + ')');
+
+  ['inv-new-nom','inv-new-type-autre','inv-new-prix','inv-new-prixachat','inv-new-fournisseurs'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('invAddPanel').style.display = 'none';
+  invActiveCat = type;
+  renderInvTabs();
+  renderInvTable();
+});
 
 async function initInventoryUI(){
   if(invInitialized) return;
@@ -1336,6 +1603,17 @@ document.getElementById('changePwBtn').addEventListener('click', openPwPanel);
 document.getElementById('invChangePwBtn').addEventListener('click', openPwPanel);
 document.getElementById('pwPanelClose').addEventListener('click', closePwPanel);
 
+function openHistPanel(){
+  document.getElementById('histPanel').style.display = 'flex';
+  renderHistorique();
+}
+function closeHistPanel(){
+  document.getElementById('histPanel').style.display = 'none';
+}
+document.getElementById('histBtn').addEventListener('click', openHistPanel);
+document.getElementById('invHistBtn').addEventListener('click', openHistPanel);
+document.getElementById('histPanelClose').addEventListener('click', closeHistPanel);
+
 document.getElementById('pw-save').addEventListener('click', async ()=>{
   const current = document.getElementById('pw-current').value;
   const next = document.getElementById('pw-new').value;
@@ -1372,11 +1650,14 @@ function refPath(tab){
 
 async function persist(tab){
   if(!db) return;
+  showSaving();
   try{
     const data = tab === 'main' ? customMain : tab === 'actif' ? customActive : customBl;
     await db.ref(refPath(tab)).set(data);
   }catch(e){
     console.error('Erreur de sauvegarde Firebase', e);
+  }finally{
+    hideSaving();
   }
 }
 
@@ -1477,6 +1758,9 @@ document.getElementById('toggleAdd').addEventListener('click', ()=>{
 document.getElementById('cancelAdd').addEventListener('click', ()=>{
   addPanel.style.display = 'none';
 });
+
+document.getElementById('printBtn').addEventListener('click', ()=> window.print());
+document.getElementById('invPrintBtn').addEventListener('click', ()=> window.print());
 
 const motifSelect = document.getElementById('f-motif');
 const raisonBox = document.getElementById('f-raison');
@@ -1633,6 +1917,7 @@ document.getElementById('saveEntry').addEventListener('click', async ()=>{
   else if(targetTab === 'actif'){ customActive.push(entry); }
   else { customBl.push(entry); }
   await persist(targetTab);
+  logAction('Ajout fiche', entry.nom + ' (' + targetTab + ')');
 
   ['f-nom','f-tel','f-banque','f-id'].forEach(id=>document.getElementById(id).value='');
   roleSelect.selectedIndex = 0;
