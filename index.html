@@ -2534,6 +2534,8 @@ document.querySelectorAll('.presentToggle').forEach(btn=>{
 const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1547773540969877584/qWXHoGltaEEs2waOFeFjAC2InDGCXJpl0j-V4z3sXUb_GHQ8Max-NJJf7G-RxZS-uSlD";
 // Colle ici l'ID du rôle @direction (clic droit sur le rôle dans Discord, avec le mode développeur activé, → "Copier l'ID du rôle")
 const DISCORD_ROLE_ID = "1181348873898311762";
+// Lien du site (celui de GitHub Pages), envoyé avec chaque notification de commande
+const SITE_URL = "https://antho6262.github.io/registre-umami/";
 
 const ZONE_TAX_RATES = { Nord: 0.04, Sud: 0.05, Cayo: 0.03 };
 
@@ -2709,7 +2711,8 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
       '📥 **Nouvelle commande** de **' + client + '** (' + zone + ')\n' +
       lignes.map(l => '• ' + l.nom + ' x' + l.qte + ' — ' + formatMoneyPlain(l.prixTotal)).join('\n') +
       '\n**Total TTC : ' + formatMoneyPlain(ttc) + '**\nRéférence : `' + refKey + '`' +
-      (contact ? '\nContact : ' + contact : ''),
+      (contact ? '\nContact : ' + contact : '') +
+      (SITE_URL ? '\n🔗 ' + SITE_URL : ''),
       true
     );
 
