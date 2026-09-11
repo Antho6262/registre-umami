@@ -2561,7 +2561,7 @@ document.querySelectorAll('.presentToggle').forEach(btn=>{
 // Colle ici l'URL de ton webhook Discord (Salon → Paramètres → Intégrations → Webhooks)
 const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1547790176548290651/ppjJMljNGjRqaDhGXvqX0TKXEmOii_3shabw_Gbp5RLUNI5s0kxiWTzJZlmZjJKjBhdh";
 // Colle ici l'ID du rôle @direction (clic droit sur le rôle dans Discord, avec le mode développeur activé, → "Copier l'ID du rôle")
-const DISCORD_ROLE_ID = "1181348873898311762";
+const DISCORD_ROLE_IDS = ["1181348873898311762", "1332038089178218526"]; // @Direction, @Responsable
 // Lien du site (celui de GitHub Pages), envoyé avec chaque notification de commande
 const SITE_URL = "https://antho6262.github.io/registre-umami/";
 // Webhook d'un salon dédié aux factures payées (optionnel). Laisse vide pour désactiver.
@@ -2605,9 +2605,10 @@ async function discordPost(payload, threadId, threadName){
 
 async function sendDiscordMessage(content, pingRole){
   if(!DISCORD_WEBHOOK_URL) return null;
-  const payload = { content: (pingRole && DISCORD_ROLE_ID) ? ('<@&' + DISCORD_ROLE_ID + '> ' + content) : content };
-  if(pingRole && DISCORD_ROLE_ID){
-    payload.allowed_mentions = { roles: [DISCORD_ROLE_ID] };
+  const pings = DISCORD_ROLE_IDS.map(id => '<@&' + id + '>').join(' ');
+  const payload = { content: (pingRole && DISCORD_ROLE_IDS.length) ? (pings + ' ' + content) : content };
+  if(pingRole && DISCORD_ROLE_IDS.length){
+    payload.allowed_mentions = { roles: DISCORD_ROLE_IDS };
   }
   return discordPost(payload);
 }
@@ -2832,7 +2833,8 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
     const refKey = 'CMD-' + String(num).padStart(4, '0');
     order.ref = refKey;
 
-    const pingText = (DISCORD_ROLE_ID ? ('<@&' + DISCORD_ROLE_ID + '> ') : '') +
+    const rolePings = DISCORD_ROLE_IDS.map(id => '<@&' + id + '>').join(' ');
+    const pingText = (rolePings ? (rolePings + ' ') : '') +
       '📥 **Nouvelle commande** de **' + client + '** (' + zone + ' — ' + (modeLivraison === 'livraison' ? '🚚 Livraison' : '🍱 Retrait sur place') + ')\n' +
       lignes.map(l => '• ' + l.nom + ' x' + l.qte + ' — ' + formatMoneyPlain(l.prixTotal)).join('\n') +
       '\n**Total TTC : ' + formatMoneyPlain(ttc) + '**\nRéférence : `' + refKey + '`' +
@@ -2840,7 +2842,7 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
       (SITE_URL ? '\n🔗 ' + SITE_URL : '');
 
     const msg = await discordPost(
-      { content: pingText, allowed_mentions: DISCORD_ROLE_ID ? { roles: [DISCORD_ROLE_ID] } : undefined },
+      { content: pingText, allowed_mentions: DISCORD_ROLE_IDS.length ? { roles: DISCORD_ROLE_IDS } : undefined },
       null,
       'Commande ' + refKey + ' — ' + client
     );
