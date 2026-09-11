@@ -1096,6 +1096,7 @@
       <button class="btn secondary" id="commandeDetailClose" type="button">Fermer</button>
       <button class="btn secondary" id="commandeRefuseBtn" type="button" style="border-color:var(--accent);color:var(--accent);">Refuser</button>
       <button class="btn secondary" id="commandePaidBtn" type="button" style="border-color:var(--ok);color:var(--ok);display:none;">Marquer payée</button>
+      <button class="btn secondary" id="commandePretBtn" type="button" style="border-color:var(--gold);color:var(--gold);display:none;">Commande prête</button>
       <button class="btn" id="commandeAcceptBtn" type="button">Accepter</button>
     </div>
   </section>
@@ -2911,7 +2912,7 @@ function renderMyOrdersFromCache(){
       '<div style="display:flex;justify-content:space-between;align-items:center;">' +
       '<b>' + escapeHtml(o.client) + '</b> — <span class="hint">' + escapeHtml(o.ref) + '</span>' +
       '</div>' +
-      '<p>' + (STATUT_BADGE[o.statut] || o.statut) + '</p>' +
+      '<p>' + (STATUT_BADGE[o.statut] || o.statut) + (o.prete ? ' — <span style="color:var(--gold);font-weight:bold;">🍱 Prête à récupérer</span>' : '') + '</p>' +
       '<div class="add-actions" style="justify-content:flex-start;">' +
       '<button class="btn secondary view-order" data-ref="' + o.ref + '" type="button">Voir le document</button>' +
       '</div>' +
@@ -3084,12 +3085,15 @@ function openCommandeDetail(order){
   currentDetailOrder = order;
   document.getElementById('commandeDetailContent').innerHTML = generateDevisHTML(order, (order.statut==='validee'||order.statut==='payee') ? 'FACTURE' : 'DEVIS') +
     (order.tel ? '<p style="padding:0 24px 4px;">Téléphone : ' + escapeHtml(order.tel) + '</p>' : '') +
-    (order.clientWebhook ? '<p style="padding:0 24px 12px;">Webhook client : configuré ✓</p>' : '');
+    (order.clientWebhook ? '<p style="padding:0 24px 4px;">Webhook client : configuré ✓</p>' : '') +
+    (order.prete ? '<p style="padding:0 24px 12px;color:var(--gold);font-weight:bold;">🍱 Commande marquée prête</p>' : '');
   const isPending = order.statut === 'en_attente';
   const isValidee = order.statut === 'validee';
+  const canMarkReady = (order.statut === 'validee' || order.statut === 'payee') && !order.prete;
   document.getElementById('commandeAcceptBtn').style.display = isPending ? 'inline-block' : 'none';
   document.getElementById('commandeRefuseBtn').style.display = isPending ? 'inline-block' : 'none';
   document.getElementById('commandePaidBtn').style.display = isValidee ? 'inline-block' : 'none';
+  document.getElementById('commandePretBtn').style.display = canMarkReady ? 'inline-block' : 'none';
   document.getElementById('commandeDetailModal').style.display = 'flex';
 }
 
@@ -3129,6 +3133,16 @@ document.getElementById('commandePaidBtn').addEventListener('click', async ()=>{
   logAction('Commande marquée payée', currentDetailOrder.client + ' — ' + formatMoneyPlain(currentDetailOrder.ttc));
   await notifyOrderUpdate(currentDetailOrder, '💰 Commande marquée **payée** ✓ Merci !');
   await sendInvoiceToFinanceChannel(currentDetailOrder);
+  document.getElementById('commandeDetailModal').style.display = 'none';
+  renderCommandesList();
+});
+
+document.getElementById('commandePretBtn').addEventListener('click', async ()=>{
+  if(!currentDetailOrder || !db) return;
+  await db.ref('commandes/' + currentDetailOrder.ref).update({ prete: true });
+  currentDetailOrder.prete = true;
+  logAction('Commande marquée prête', currentDetailOrder.client);
+  await notifyOrderUpdate(currentDetailOrder, '🍱 Votre commande est **prête** ! Vous pouvez venir la récupérer.');
   document.getElementById('commandeDetailModal').style.display = 'none';
   renderCommandesList();
 });
