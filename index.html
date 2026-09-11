@@ -1863,6 +1863,10 @@ function setSession(key, nom, isAdmin, readOnly){
 function clearSession(){
   currentUser = null;
   try{ sessionStorage.removeItem(sessionKey()); }catch(e){}
+  if(currentApp === 'direction' && db && commandesListenerAttached){
+    db.ref('commandes').off('value');
+    commandesListenerAttached = false;
+  }
   showLanding();
 }
 
@@ -2859,22 +2863,36 @@ const STATUT_BADGE = {
   refusee: '<span style="color:var(--accent);">❌ Refusée</span>'
 };
 
-async function renderMyOrders(){
+let myOrdersCache = {};
+let myOrdersListenedRefs = new Set();
+
+function attachMyOrderListener(ref){
+  if(myOrdersListenedRefs.has(ref) || !db) return;
+  myOrdersListenedRefs.add(ref);
+  db.ref('commandes/' + ref).on('value', snap => {
+    const o = snap.val();
+    if(o){ myOrdersCache[ref] = o; }
+    renderMyOrdersFromCache();
+  });
+}
+
+function renderMyOrders(){
   const host = document.getElementById('cmdMyOrdersList');
   const refs = getMyOrderRefs();
   if(refs.length === 0 || !db){
     host.innerHTML = '<p class="hint">Aucune commande enregistrée sur ce navigateur pour le moment.</p>';
     return;
   }
-  host.innerHTML = '<p class="hint">Chargement…</p>';
-  const orders = [];
-  for(const ref of refs){
-    try{
-      const snap = await db.ref('commandes/' + ref).once('value');
-      const o = snap.val();
-      if(o) orders.push(o);
-    }catch(e){}
+  if(Object.keys(myOrdersCache).length === 0){
+    host.innerHTML = '<p class="hint">Chargement…</p>';
   }
+  refs.forEach(attachMyOrderListener);
+  if(Object.keys(myOrdersCache).length > 0) renderMyOrdersFromCache();
+}
+
+function renderMyOrdersFromCache(){
+  const host = document.getElementById('cmdMyOrdersList');
+  const orders = Object.values(myOrdersCache);
   if(orders.length === 0){
     host.innerHTML = '<p class="hint">Aucune commande trouvée.</p>';
     return;
@@ -3018,35 +3036,47 @@ document.getElementById('cmdDownloadDevis').addEventListener('click', ()=>{
 });
 
 /* ---- Gestion des commandes côté staff ---- */
-async function renderCommandesList(){
+let commandesListenerAttached = false;
+function renderCommandesFromOrders(orders){
   const host = document.getElementById('commandesList');
   const countEl = document.getElementById('commandesResultCount');
+  if(orders.length === 0){
+    if(countEl) countEl.textContent = '';
+    host.innerHTML = '<p class="hint">Aucune commande pour le moment.</p>';
+    return;
+  }
+  const STATUT_LABEL = { en_attente:'⏳ En attente', validee:'✅ Validée', payee:'💰 Payée', refusee:'❌ Refusée' };
+  if(countEl) countEl.textContent = orders.length + ' commande' + (orders.length>1?'s':'') + ' au total';
+  host.innerHTML = orders.map(o =>
+    '<div class="hist-row" style="grid-template-columns:130px 1fr 100px 120px;cursor:pointer;" data-ref="' + o.ref + '">' +
+    '<span class="hist-date">' + new Date(o.ts).toLocaleDateString('fr-FR') + '</span>' +
+    '<span class="hist-user">' + escapeHtml(o.client) + '</span>' +
+    '<span class="hist-action">' + formatMoneyPlain(o.ttc) + '</span>' +
+    '<span class="hist-details">' + (STATUT_LABEL[o.statut]||o.statut) + '</span>' +
+    '</div>'
+  ).join('');
+  host.querySelectorAll('[data-ref]').forEach(row=>{
+    row.addEventListener('click', ()=> openCommandeDetail(orders.find(o=>o.ref===row.getAttribute('data-ref'))));
+  });
+}
+
+function renderCommandesList(){
+  const host = document.getElementById('commandesList');
   if(!db){ host.innerHTML = '<p class="hint">Pas de connexion.</p>'; return; }
-  try{
-    const snap = await db.ref('commandes').once('value');
+  if(commandesListenerAttached) return; // déjà en écoute temps réel, rien à refaire
+  commandesListenerAttached = true;
+  db.ref('commandes').on('value', snap => {
     const val = snap.val() || {};
     const orders = Object.values(val).sort((a,b)=>b.ts-a.ts);
-    if(orders.length === 0){
-      if(countEl) countEl.textContent = '';
-      host.innerHTML = '<p class="hint">Aucune commande pour le moment.</p>';
-      return;
+    renderCommandesFromOrders(orders);
+    // Rafraîchit aussi la modale de détail si elle est ouverte sur cette commande
+    if(currentDetailOrder){
+      const updated = orders.find(o=>o.ref===currentDetailOrder.ref);
+      if(updated && document.getElementById('commandeDetailModal').style.display !== 'none'){
+        openCommandeDetail(updated);
+      }
     }
-    const STATUT_LABEL = { en_attente:'⏳ En attente', validee:'✅ Validée', payee:'💰 Payée', refusee:'❌ Refusée' };
-    if(countEl) countEl.textContent = orders.length + ' commande' + (orders.length>1?'s':'') + ' au total';
-    host.innerHTML = orders.map(o =>
-      '<div class="hist-row" style="grid-template-columns:130px 1fr 100px 120px;cursor:pointer;" data-ref="' + o.ref + '">' +
-      '<span class="hist-date">' + new Date(o.ts).toLocaleDateString('fr-FR') + '</span>' +
-      '<span class="hist-user">' + escapeHtml(o.client) + '</span>' +
-      '<span class="hist-action">' + formatMoneyPlain(o.ttc) + '</span>' +
-      '<span class="hist-details">' + (STATUT_LABEL[o.statut]||o.statut) + '</span>' +
-      '</div>'
-    ).join('');
-    host.querySelectorAll('[data-ref]').forEach(row=>{
-      row.addEventListener('click', ()=> openCommandeDetail(orders.find(o=>o.ref===row.getAttribute('data-ref'))));
-    });
-  }catch(e){
-    host.innerHTML = '<p class="hint">Erreur de chargement.</p>';
-  }
+  });
 }
 
 let currentDetailOrder = null;
