@@ -721,6 +721,8 @@
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
@@ -1185,14 +1187,17 @@
       <div id="cmdDevisContent"></div>
       <div class="add-actions">
         <button class="btn secondary" id="cmdPrintDevis" type="button">Imprimer</button>
+        <button class="btn secondary" id="cmdDownloadDevis" type="button">Télécharger PDF</button>
         <button class="btn secondary" id="cmdNewOrder" type="button">Nouvelle commande</button>
       </div>
     </div>
 
     <div id="cmdTrackPanel" style="display:none;">
-      <div class="add-grid" style="grid-template-columns:1fr auto;">
-        <div class="field"><label>Référence de commande</label><input type="text" id="cmd-ref-input" placeholder="Ex. CMD-0001"></div>
-        <button class="btn secondary" id="cmdTrackSearchBtn" type="button" style="align-self:end;">Rechercher</button>
+      <p class="hint">Tes dernières commandes passées depuis ce navigateur s'affichent automatiquement ci-dessous.</p>
+      <div id="cmdMyOrdersList"></div>
+      <div class="add-grid" style="grid-template-columns:1fr auto;margin-top:20px;">
+        <div class="field"><label>Ajouter une commande par référence (autre appareil)</label><input type="text" id="cmd-ref-input" placeholder="Ex. CMD-0001"></div>
+        <button class="btn secondary" id="cmdTrackSearchBtn" type="button" style="align-self:end;">Ajouter</button>
       </div>
       <div id="cmdTrackResult"></div>
     </div>
@@ -2536,6 +2541,8 @@ const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/154777354096987758
 const DISCORD_ROLE_ID = "1181348873898311762";
 // Lien du site (celui de GitHub Pages), envoyé avec chaque notification de commande
 const SITE_URL = "https://antho6262.github.io/registre-umami/";
+// Webhook d'un salon dédié aux factures payées (optionnel). Laisse vide pour désactiver.
+const DISCORD_INVOICE_WEBHOOK_URL = "";
 
 const ZONE_TAX_RATES = { Nord: 0.04, Sud: 0.05, Cayo: 0.03 };
 
@@ -2546,19 +2553,59 @@ function formatMoneyPlain(n){
   return n.toLocaleString('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:2}) + '$';
 }
 
-async function sendDiscordMessage(content, pingRole){
-  if(!DISCORD_WEBHOOK_URL) return;
-  const payload = { content: (pingRole && DISCORD_ROLE_ID) ? ('<@&' + DISCORD_ROLE_ID + '> ' + content) : content };
-  if(pingRole && DISCORD_ROLE_ID){
-    payload.allowed_mentions = { roles: [DISCORD_ROLE_ID] };
-  }
+// Envoie un message Discord. Si threadName est fourni, crée un nouveau fil de discussion
+// et renvoie son ID (channel_id). Si threadId est fourni, poste dans ce fil existant.
+async function discordPost(payload, threadId, threadName){
+  if(!DISCORD_WEBHOOK_URL) return null;
+  let url = DISCORD_WEBHOOK_URL + '?wait=true';
+  if(threadId) url += '&thread_id=' + threadId;
+  if(threadName) payload = Object.assign({}, payload, { thread_name: threadName.slice(0, 90) });
   try{
-    await fetch(DISCORD_WEBHOOK_URL, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-  }catch(e){ console.error('Erreur webhook Discord', e); }
+    if(!res.ok) return null;
+    return await res.json();
+  }catch(e){ console.error('Erreur webhook Discord', e); return null; }
+}
+
+async function sendDiscordMessage(content, pingRole){
+  if(!DISCORD_WEBHOOK_URL) return null;
+  const payload = { content: (pingRole && DISCORD_ROLE_ID) ? ('<@&' + DISCORD_ROLE_ID + '> ' + content) : content };
+  if(pingRole && DISCORD_ROLE_ID){
+    payload.allowed_mentions = { roles: [DISCORD_ROLE_ID] };
+  }
+  return discordPost(payload);
+}
+
+// Envoie un message dans le fil Discord d'une commande (si le fil existe)
+async function sendDiscordThreadMessage(order, content){
+  if(!order || !order.discordThreadId) return;
+  await discordPost({ content }, order.discordThreadId);
+}
+
+// Envoie la facture (image) dans le salon dédié aux factures payées
+async function sendInvoiceToFinanceChannel(order){
+  if(!DISCORD_INVOICE_WEBHOOK_URL || typeof html2canvas === 'undefined') return;
+  try{
+    const wrapper = document.createElement('div');
+    wrapper.style.position = 'fixed';
+    wrapper.style.left = '-9999px';
+    wrapper.style.top = '0';
+    wrapper.innerHTML = generateDevisHTML(order, 'FACTURE');
+    document.body.appendChild(wrapper);
+    const canvas = await html2canvas(wrapper.firstChild, { backgroundColor: null, scale: 2 });
+    document.body.removeChild(wrapper);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    const formData = new FormData();
+    formData.append('payload_json', JSON.stringify({
+      content: '💰 **Facture payée** — ' + order.client + ' (réf. `' + order.ref + '`) — ' + formatMoneyPlain(order.ttc) + ' TTC'
+    }));
+    formData.append('files[0]', blob, 'facture-' + order.ref + '.png');
+    await fetch(DISCORD_INVOICE_WEBHOOK_URL, { method: 'POST', body: formData });
+  }catch(e){ console.error('Erreur envoi facture salon dédié', e); }
 }
 
 function cmdCategories(){
@@ -2631,28 +2678,41 @@ function renderCmdSummary(){
 
 function generateDevisHTML(order, docType){
   const dateStr = new Date(order.ts).toLocaleDateString('fr-FR');
-  const zoneLabel = order.zone;
   const logoSrc = document.getElementById('headerLogo') ? document.getElementById('headerLogo').src : '';
-  const rows = order.lignes.map(l =>
-    '<tr><td>' + escapeHtml(l.nom) + '</td><td style="text-align:center;">' + l.qte + '</td><td style="text-align:right;">' + formatMoneyPlain(l.prixUnitaire) + '</td><td style="text-align:right;">' + formatMoneyPlain(l.prixTotal) + '</td></tr>'
+  const zoneBox = (z) => (order.zone === z ? '☑' : '☐') + ' ' + z;
+  const rows = order.lignes.map((l, i) =>
+    '<tr style="background:' + (i % 2 === 0 ? '#000' : '#2a2010') + ';">' +
+    '<td style="padding:8px 6px;color:#f4ece0;">' + escapeHtml(l.nom) + '</td>' +
+    '<td style="padding:8px 6px;text-align:center;color:#f4ece0;">' + l.qte + '</td>' +
+    '<td style="padding:8px 6px;text-align:right;color:#f4ece0;">' + formatMoneyPlain(l.prixUnitaire) + '</td>' +
+    '<td style="padding:8px 6px;text-align:right;color:#f4ece0;">' + formatMoneyPlain(l.prixTotal) + '</td></tr>'
   ).join('');
   return '' +
-    '<div style="font-family:Helvetica,Arial,sans-serif;color:#222;background:#fff;padding:24px;">' +
-    '<div style="display:flex;align-items:center;gap:14px;">' +
-    (logoSrc ? '<img src="' + logoSrc + '" alt="Umami" style="width:56px;height:56px;">' : '') +
-    '<div><h2 style="margin:0;">Restaurant Umami</h2>' +
-    '<p style="margin:2px 0;">Banque de Los Santos — RIB : 20050</p></div>' +
+    '<div style="font-family:Helvetica,Arial,sans-serif;color:#f4ece0;background:#000;padding:30px;border:1px solid #b3402a;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
+    '<div>' +
+    '<h2 style="margin:0;color:#e0392a;font-size:26px;">Restaurant Umami</h2>' +
+    '<p style="margin:4px 0;color:#f4ece0;">Banque de Los Santos</p>' +
+    '<p style="margin:0;color:#e0392a;font-weight:bold;">RIB : 20050</p>' +
     '</div>' +
-    '<h1 style="margin:18px 0 4px;">' + docType + '</h1>' +
-    '<p>Éditée le : ' + dateStr + (order.ref ? ' — Réf. ' + escapeHtml(order.ref) : '') + '</p>' +
-    '<p><b>Client :</b> ' + escapeHtml(order.client) + '<br><b>Zone fiscale :</b> ' + escapeHtml(zoneLabel) + '</p>' +
-    '<table style="width:100%;border-collapse:collapse;margin-top:14px;">' +
-    '<thead><tr style="border-bottom:2px solid #222;"><th style="text-align:left;">Description</th><th>Qté</th><th style="text-align:right;">Prix unitaire</th><th style="text-align:right;">Prix total</th></tr></thead>' +
+    (logoSrc ? '<img src="' + logoSrc + '" alt="Umami" style="width:110px;height:110px;">' : '') +
+    '</div>' +
+    '<h1 style="margin:20px 0 4px;color:#f4ece0;font-size:38px;">' + docType + '</h1>' +
+    '<p style="color:#e0392a;">' + dateStr + (order.ref ? ' — Réf. ' + escapeHtml(order.ref) : '') + '</p>' +
+    '<p style="margin:14px 0 4px;"><b>Client :</b></p>' +
+    '<p style="margin:0 0 14px;color:#e0392a;font-weight:bold;font-size:1.1em;">' + escapeHtml(order.client) + '</p>' +
+    '<p><b>Zone Fiscale :</b> ' + zoneBox('Sud') + '&nbsp;&nbsp;' + zoneBox('Nord') + '&nbsp;&nbsp;' + zoneBox('Cayo') + '</p>' +
+    '<table style="width:100%;border-collapse:collapse;margin-top:16px;">' +
+    '<thead><tr style="border-bottom:2px solid #e0392a;">' +
+    '<th style="padding:8px 6px;text-align:left;color:#e0392a;">Description</th>' +
+    '<th style="padding:8px 6px;color:#e0392a;">Qté</th>' +
+    '<th style="padding:8px 6px;text-align:right;color:#e0392a;">Prix unitaire</th>' +
+    '<th style="padding:8px 6px;text-align:right;color:#e0392a;">Prix total</th></tr></thead>' +
     '<tbody>' + rows + '</tbody></table>' +
-    '<p style="text-align:right;margin-top:10px;">Poids : ' + order.poids + ' KG</p>' +
-    '<p style="text-align:right;">Sous-total HT : <b>' + formatMoneyPlain(order.sousTotalHT) + '</b></p>' +
-    '<p style="text-align:right;font-size:1.2em;">TTC : <b>' + formatMoneyPlain(order.ttc) + '</b></p>' +
-    (order.statut === 'refusee' ? '<p style="color:#b3402a;font-weight:bold;">Commande refusée' + (order.raisonRefus ? ' — ' + escapeHtml(order.raisonRefus) : '') + '</p>' : '') +
+    '<p style="text-align:right;margin-top:14px;color:#e0392a;">Poids : ' + order.poids + ' KG</p>' +
+    '<p style="text-align:right;color:#f4ece0;">Sous-total HT : <b>' + formatMoneyPlain(order.sousTotalHT) + '</b></p>' +
+    '<p style="text-align:right;font-size:1.3em;color:#f4ece0;">TTC : <b>' + formatMoneyPlain(order.ttc) + '</b></p>' +
+    (order.statut === 'refusee' ? '<p style="color:#e0392a;font-weight:bold;">Commande refusée' + (order.raisonRefus ? ' — ' + escapeHtml(order.raisonRefus) : '') + '</p>' : '') +
     (order.statut === 'en_attente' ? '<p style="color:#c98a2d;font-weight:bold;">En attente de validation par notre équipe. Ceci est un devis, pas encore une facture officielle.</p>' : '') +
     (order.statut === 'validee' ? '<p style="color:#5c8a5c;font-weight:bold;">Commande validée ✓ — En attente de paiement</p>' : '') +
     (order.statut === 'payee' ? '<p style="color:#5c8a5c;font-weight:bold;font-size:1.15em;">FACTURE PAYÉE ✓</p>' : '') +
@@ -2704,17 +2764,24 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
     const num = txResult.snapshot.val();
     const refKey = 'CMD-' + String(num).padStart(4, '0');
     order.ref = refKey;
-    await db.ref('commandes/' + refKey).set(order);
-    hideSaving();
 
-    await sendDiscordMessage(
+    const pingText = (DISCORD_ROLE_ID ? ('<@&' + DISCORD_ROLE_ID + '> ') : '') +
       '📥 **Nouvelle commande** de **' + client + '** (' + zone + ')\n' +
       lignes.map(l => '• ' + l.nom + ' x' + l.qte + ' — ' + formatMoneyPlain(l.prixTotal)).join('\n') +
       '\n**Total TTC : ' + formatMoneyPlain(ttc) + '**\nRéférence : `' + refKey + '`' +
       (contact ? '\nContact : ' + contact : '') +
-      (SITE_URL ? '\n🔗 ' + SITE_URL : ''),
-      true
+      (SITE_URL ? '\n🔗 ' + SITE_URL : '');
+
+    const msg = await discordPost(
+      { content: pingText, allowed_mentions: DISCORD_ROLE_ID ? { roles: [DISCORD_ROLE_ID] } : undefined },
+      null,
+      'Commande ' + refKey + ' — ' + client
     );
+    if(msg && msg.channel_id) order.discordThreadId = msg.channel_id;
+
+    await db.ref('commandes/' + refKey).set(order);
+    rememberMyOrder(refKey);
+    hideSaving();
 
     document.getElementById('cmdDevisContent').innerHTML = generateDevisHTML(order, 'DEVIS');
     document.getElementById('cmdFormPanel').style.display = 'none';
@@ -2737,10 +2804,117 @@ document.getElementById('cmdNewOrder').addEventListener('click', ()=>{
   renderCmdSummary();
 });
 
+function getMyOrderRefs(){
+  try{ return JSON.parse(localStorage.getItem('umami_my_orders') || '[]'); }catch(e){ return []; }
+}
+function rememberMyOrder(refKey){
+  try{
+    const list = getMyOrderRefs();
+    if(!list.includes(refKey)){
+      list.unshift(refKey);
+      localStorage.setItem('umami_my_orders', JSON.stringify(list.slice(0, 20)));
+    }
+  }catch(e){}
+}
+
+const STATUT_BADGE = {
+  en_attente: '<span style="color:var(--warn);">⏳ En attente de validation</span>',
+  validee: '<span style="color:var(--ok);">✅ Validée — en attente de paiement</span>',
+  payee: '<span style="color:var(--ok);font-weight:bold;">💰 Payée ✓</span>',
+  refusee: '<span style="color:var(--accent);">❌ Refusée</span>'
+};
+
+async function renderMyOrders(){
+  const host = document.getElementById('cmdMyOrdersList');
+  const refs = getMyOrderRefs();
+  if(refs.length === 0 || !db){
+    host.innerHTML = '<p class="hint">Aucune commande enregistrée sur ce navigateur pour le moment.</p>';
+    return;
+  }
+  host.innerHTML = '<p class="hint">Chargement…</p>';
+  const orders = [];
+  for(const ref of refs){
+    try{
+      const snap = await db.ref('commandes/' + ref).once('value');
+      const o = snap.val();
+      if(o) orders.push(o);
+    }catch(e){}
+  }
+  if(orders.length === 0){
+    host.innerHTML = '<p class="hint">Aucune commande trouvée.</p>';
+    return;
+  }
+  orders.sort((a,b)=>b.ts-a.ts);
+  host.innerHTML = orders.map(o => {
+    const docType = (o.statut === 'validee' || o.statut === 'payee') ? 'FACTURE' : 'DEVIS';
+    const proofBox = (o.statut === 'validee') ?
+      '<div class="add-grid" style="grid-template-columns:1fr auto;margin-top:10px;">' +
+      '<div class="field"><label>Preuve de paiement (lien, capture, référence de virement)</label><input type="text" class="proof-input" data-ref="' + o.ref + '" value="' + escapeHtml(o.preuvePaiement||'') + '" placeholder="Ex. lien vers la capture, ou référence du virement"></div>' +
+      '<button class="btn secondary proof-submit" data-ref="' + o.ref + '" type="button" style="align-self:end;">Envoyer</button>' +
+      '</div>' +
+      (o.preuvePaiement ? '<p class="hint" style="color:var(--ok);">Preuve envoyée, en attente de vérification par le staff.</p>' : '') : '';
+    return '<div class="chart-box" style="margin:14px 0;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+      '<b>' + escapeHtml(o.client) + '</b> — <span class="hint">' + escapeHtml(o.ref) + '</span>' +
+      '</div>' +
+      '<p>' + (STATUT_BADGE[o.statut] || o.statut) + '</p>' +
+      '<div class="add-actions" style="justify-content:flex-start;">' +
+      '<button class="btn secondary view-order" data-ref="' + o.ref + '" type="button">Voir le document</button>' +
+      '</div>' +
+      '<div class="order-doc" data-ref="' + o.ref + '" style="display:none;margin-top:10px;"></div>' +
+      proofBox +
+      '</div>';
+  }).join('');
+
+  host.querySelectorAll('.view-order').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const ref = btn.getAttribute('data-ref');
+      const order = orders.find(o=>o.ref===ref);
+      const docHost = host.querySelector('.order-doc[data-ref="' + ref + '"]');
+      const opening = docHost.style.display === 'none';
+      docHost.style.display = opening ? 'block' : 'none';
+      if(opening){
+        const docType = (order.statut === 'validee' || order.statut === 'payee') ? 'FACTURE' : 'DEVIS';
+        docHost.innerHTML = generateDevisHTML(order, docType) +
+          '<div class="add-actions"><button class="btn secondary dl-order" data-ref="' + ref + '" type="button">Télécharger PDF</button></div>';
+        docHost.querySelector('.dl-order').addEventListener('click', ()=> downloadDevisPDF(docHost.querySelector('div'), ref));
+      }
+    });
+  });
+
+  host.querySelectorAll('.proof-submit').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const ref = btn.getAttribute('data-ref');
+      const input = host.querySelector('.proof-input[data-ref="' + ref + '"]');
+      const proof = input.value.trim();
+      if(!proof || !db) return;
+      const order = orders.find(o=>o.ref===ref);
+      await db.ref('commandes/' + ref).update({ preuvePaiement: proof });
+      order.preuvePaiement = proof;
+      await sendDiscordThreadMessage(order, '💳 Le client a soumis une preuve de paiement : ' + proof);
+      renderMyOrders();
+    });
+  });
+}
+
+async function downloadDevisPDF(el, refName){
+  if(typeof html2canvas === 'undefined' || !window.jspdf){ alert("Le module de téléchargement PDF n'a pas pu se charger."); return; }
+  const canvas = await html2canvas(el, { backgroundColor: null, scale: 2 });
+  const imgData = canvas.toDataURL('image/png');
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const imgWidth = pageWidth - 40;
+  const imgHeight = canvas.height * (imgWidth / canvas.width);
+  pdf.addImage(imgData, 'PNG', 20, 20, imgWidth, imgHeight);
+  pdf.save((refName || 'facture-umami') + '.pdf');
+}
+
 document.getElementById('cmdTrackBtn').addEventListener('click', ()=>{
   document.getElementById('cmdFormPanel').style.display = 'none';
   document.getElementById('cmdDevisPanel').style.display = 'none';
   document.getElementById('cmdTrackPanel').style.display = 'block';
+  renderMyOrders();
 });
 
 document.getElementById('cmdTrackSearchBtn').addEventListener('click', async ()=>{
@@ -2751,11 +2925,18 @@ document.getElementById('cmdTrackSearchBtn').addEventListener('click', async ()=
     const snap = await db.ref('commandes/' + refInput).once('value');
     const order = snap.val();
     if(!order){ resultEl.innerHTML = '<p class="hint">Aucune commande trouvée avec cette référence.</p>'; return; }
-    const docType = (order.statut === 'validee' || order.statut === 'payee') ? 'FACTURE' : 'DEVIS';
-    resultEl.innerHTML = generateDevisHTML(order, docType);
+    rememberMyOrder(refInput);
+    document.getElementById('cmd-ref-input').value = '';
+    resultEl.innerHTML = '';
+    renderMyOrders();
   }catch(e){
     resultEl.innerHTML = '<p class="hint">Erreur de recherche.</p>';
   }
+});
+
+document.getElementById('cmdDownloadDevis').addEventListener('click', ()=>{
+  const el = document.getElementById('cmdDevisContent').querySelector('div');
+  downloadDevisPDF(el, 'devis-umami');
 });
 
 /* ---- Gestion des commandes côté staff ---- */
@@ -2814,8 +2995,9 @@ document.getElementById('commandeDetailClose').addEventListener('click', ()=>{
 document.getElementById('commandeAcceptBtn').addEventListener('click', async ()=>{
   if(!currentDetailOrder || !db) return;
   await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'validee' });
+  currentDetailOrder.statut = 'validee';
   logAction('Commande validée', currentDetailOrder.client + ' — ' + formatMoneyPlain(currentDetailOrder.ttc));
-  await sendDiscordMessage('✅ Commande de **' + currentDetailOrder.client + '** validée (réf. `' + currentDetailOrder.ref + '`) — ' + formatMoneyPlain(currentDetailOrder.ttc) + ' TTC.');
+  await sendDiscordThreadMessage(currentDetailOrder, '✅ Commande **validée** — ' + formatMoneyPlain(currentDetailOrder.ttc) + ' TTC. Merci de procéder au virement.');
   document.getElementById('commandeDetailModal').style.display = 'none';
   renderCommandesList();
 });
@@ -2824,8 +3006,9 @@ document.getElementById('commandeRefuseBtn').addEventListener('click', async ()=
   if(!currentDetailOrder || !db) return;
   const raison = prompt('Raison du refus (optionnel) :') || '';
   await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'refusee', raisonRefus: raison });
+  currentDetailOrder.statut = 'refusee';
   logAction('Commande refusée', currentDetailOrder.client + (raison ? ' — ' + raison : ''));
-  await sendDiscordMessage('❌ Commande de **' + currentDetailOrder.client + '** refusée (réf. `' + currentDetailOrder.ref + '`)' + (raison ? ' — ' + raison : ''));
+  await sendDiscordThreadMessage(currentDetailOrder, '❌ Commande **refusée**' + (raison ? ' — ' + raison : ''));
   document.getElementById('commandeDetailModal').style.display = 'none';
   renderCommandesList();
 });
@@ -2833,8 +3016,10 @@ document.getElementById('commandeRefuseBtn').addEventListener('click', async ()=
 document.getElementById('commandePaidBtn').addEventListener('click', async ()=>{
   if(!currentDetailOrder || !db) return;
   await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'payee' });
+  currentDetailOrder.statut = 'payee';
   logAction('Commande marquée payée', currentDetailOrder.client + ' — ' + formatMoneyPlain(currentDetailOrder.ttc));
-  await sendDiscordMessage('💰 Commande de **' + currentDetailOrder.client + '** marquée **payée** (réf. `' + currentDetailOrder.ref + '`).');
+  await sendDiscordThreadMessage(currentDetailOrder, '💰 Commande marquée **payée** ✓ Merci !');
+  await sendInvoiceToFinanceChannel(currentDetailOrder);
   document.getElementById('commandeDetailModal').style.display = 'none';
   renderCommandesList();
 });
