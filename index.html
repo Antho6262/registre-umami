@@ -813,6 +813,7 @@
       <button id="invChangePwBtn">Changer mon mot de passe</button>
       <button id="invManageMembersBtn" style="display:none;">Gérer les membres</button>
       <button id="invHistBtn">Historique</button>
+      <button id="invFournisseursBtn">Fournisseurs</button>
       <button class="themeToggle">Thème clair/sombre</button>
       <button class="presentToggle">Mode présentation</button>
       <button id="invExportBtn">Exporter CSV</button>
@@ -1082,6 +1083,18 @@
     <h2>Historique des modifications</h2>
     <div id="historiqueList" class="hist-list"></div>
     <div class="add-actions"><button class="btn secondary" id="histPanelClose" type="button">Fermer</button></div>
+  </section>
+</div>
+
+<div class="modal-backdrop" id="fournisseursPanel" style="display:none;">
+  <section class="members-panel" style="max-width:640px;">
+    <h2>Fournisseurs</h2>
+    <div id="fournisseursList" class="hist-list"></div>
+    <div class="add-member-grid" style="margin-top:16px;">
+      <div class="field"><label>Ajouter un fournisseur</label><input type="text" id="fourn-new-name" placeholder="Nom du fournisseur"></div>
+      <button class="btn secondary" id="fourn-add" type="button">Ajouter</button>
+    </div>
+    <div class="add-actions"><button class="btn secondary" id="fournisseursPanelClose" type="button">Fermer</button></div>
   </section>
 </div>
 
@@ -1511,6 +1524,74 @@ function hideAuthScreen(){
 
 /* ================= INVENTAIRE ================= */
 let invItems = [];
+let invSuppliers = {}; // { "Nom du fournisseur": { vivant: true/false } }
+
+function splitFournisseurs(str){
+  return (str || '').split(/[\/,]/).map(s=>s.trim()).filter(Boolean);
+}
+
+function fournisseurStatusIcons(str){
+  const names = splitFournisseurs(str);
+  if(names.length === 0) return '';
+  return names.map(n=>{
+    const info = invSuppliers[n];
+    if(!info) return '';
+    return info.vivant === false
+      ? ' <span title="' + escapeHtml(n) + ' — mort" style="color:var(--accent);">☠</span>'
+      : ' <span title="' + escapeHtml(n) + ' — vivant" style="color:var(--ok);">●</span>';
+  }).join('');
+}
+
+async function loadInvSuppliers(){
+  if(!db){ invSuppliers = {}; return; }
+  try{
+    const snap = await db.ref('inventaire/fournisseurs').once('value');
+    invSuppliers = snap.val() || {};
+  }catch(e){ invSuppliers = {}; }
+}
+
+async function persistInvSuppliers(){
+  if(!db) return;
+  showSaving();
+  try{ await db.ref('inventaire/fournisseurs').set(invSuppliers); }
+  catch(e){ console.error('Erreur sauvegarde fournisseurs', e); }
+  finally{ hideSaving(); }
+}
+
+function allKnownFournisseurNames(){
+  const names = new Set(Object.keys(invSuppliers));
+  invItems.forEach(it => splitFournisseurs(it.fournisseurs).forEach(n => names.add(n)));
+  return Array.from(names).sort((a,b)=>a.localeCompare(b, 'fr'));
+}
+
+function renderFournisseursPanel(){
+  const host = document.getElementById('fournisseursList');
+  const names = allKnownFournisseurNames();
+  if(names.length === 0){
+    host.innerHTML = '<p class="hint">Aucun fournisseur pour le moment.</p>';
+    return;
+  }
+  host.innerHTML = names.map(n=>{
+    const alive = invSuppliers[n] ? invSuppliers[n].vivant !== false : true;
+    return '<div class="hist-row" style="grid-template-columns:1fr 140px;">' +
+      '<span class="hist-user">' + escapeHtml(n) + '</span>' +
+      '<button class="btn secondary fourn-toggle" data-name="' + escapeHtml(n) + '" style="' + (alive ? 'border-color:var(--ok);color:var(--ok);' : 'border-color:var(--accent);color:var(--accent);') + '">' +
+      (alive ? '● Vivant' : '☠ Mort') + '</button>' +
+      '</div>';
+  }).join('');
+  host.querySelectorAll('.fourn-toggle').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const name = btn.getAttribute('data-name');
+      const current = invSuppliers[name] ? invSuppliers[name].vivant !== false : true;
+      invSuppliers[name] = { vivant: !current };
+      await persistInvSuppliers();
+      logAction('Statut fournisseur modifié', name + ' — ' + (!current ? 'Vivant' : 'Mort'));
+      renderFournisseursPanel();
+      renderInvTable();
+    });
+  });
+}
+
 let invActiveCat = null;
 let invSearchTerm = '';
 let invInitialized = false;
@@ -1660,7 +1741,7 @@ function renderInvTable(){
       '<td>' + invNumberField(idx, 'reserve', it.reserve, it.reserve < MIN_THRESHOLDS.reserve) + '</td>' +
       '<td>' + invTextField(idx, 'prix', it.prix) + '</td>' +
       '<td>' + invTextField(idx, 'prixAchat', it.prixAchat) + '</td>' +
-      '<td class="role">' + escapeHtml(it.fournisseurs) + '</td>' +
+      '<td>' + invTextField(idx, 'fournisseurs', it.fournisseurs) + fournisseurStatusIcons(it.fournisseurs) + '</td>' +
       '<td class="del"><button data-idx="' + idx + '" title="Supprimer">✕</button></td>' +
       '</tr>';
   });
@@ -1823,6 +1904,7 @@ async function initInventoryUI(){
   if(invInitialized) return;
   invInitialized = true;
   await loadInventoryItems();
+  await loadInvSuppliers();
   invActiveCat = invCategories()[0] || null;
   renderInvTabs();
   renderInvTable();
@@ -2073,6 +2155,24 @@ function closeHistPanel(){
 }
 document.getElementById('histBtn').addEventListener('click', openHistPanel);
 document.getElementById('invHistBtn').addEventListener('click', openHistPanel);
+
+document.getElementById('invFournisseursBtn').addEventListener('click', ()=>{
+  document.getElementById('fournisseursPanel').style.display = 'flex';
+  renderFournisseursPanel();
+});
+document.getElementById('fournisseursPanelClose').addEventListener('click', ()=>{
+  document.getElementById('fournisseursPanel').style.display = 'none';
+});
+document.getElementById('fourn-add').addEventListener('click', async ()=>{
+  const input = document.getElementById('fourn-new-name');
+  const name = input.value.trim();
+  if(!name) return;
+  invSuppliers[name] = invSuppliers[name] || { vivant: true };
+  await persistInvSuppliers();
+  logAction('Fournisseur ajouté', name);
+  input.value = '';
+  renderFournisseursPanel();
+});
 document.getElementById('histPanelClose').addEventListener('click', closeHistPanel);
 
 document.getElementById('pw-save').addEventListener('click', async ()=>{
