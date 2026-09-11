@@ -490,6 +490,23 @@
   @media (max-width:800px){ .charts-grid{ grid-template-columns:1fr; } }
 
 
+  .page-loading-overlay{
+    position:fixed; inset:0; z-index:1200;
+    background:rgba(10,8,7,0.85);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:16px;
+    font-family:'Helvetica Neue',Arial,sans-serif; font-size:13px; letter-spacing:0.08em;
+    text-transform:uppercase; color:var(--gold);
+  }
+  .spinner{
+    width:36px; height:36px;
+    border:3px solid var(--line);
+    border-top-color:var(--gold);
+    border-radius:50%;
+    animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
   .saving-indicator{
     position:fixed; bottom:20px; right:20px; z-index:1100;
     font-family:'Helvetica Neue',Arial,sans-serif; font-size:12px;
@@ -1098,6 +1115,11 @@
     </div>
     <div class="add-actions"><button class="btn secondary" id="fournisseursPanelClose" type="button">Fermer</button></div>
   </section>
+</div>
+
+<div id="pageLoadingOverlay" class="page-loading-overlay" style="display:none;">
+  <div class="spinner"></div>
+  <p>Chargement…</p>
 </div>
 
 <div id="savingIndicator" class="saving-indicator"></div>
@@ -2013,9 +2035,18 @@ async function initAuth(app){
   showAuthScreen();
 }
 
-document.getElementById('chooseRegistre').addEventListener('click', ()=> initAuth('registre'));
-document.getElementById('chooseInventaire').addEventListener('click', ()=> initAuth('inventaire'));
-document.getElementById('chooseDirection').addEventListener('click', ()=> initAuth('direction'));
+async function enterModule(app){
+  const overlay = document.getElementById('pageLoadingOverlay');
+  overlay.style.display = 'flex';
+  try{
+    await initAuth(app);
+  }finally{
+    overlay.style.display = 'none';
+  }
+}
+document.getElementById('chooseRegistre').addEventListener('click', ()=> enterModule('registre'));
+document.getElementById('chooseInventaire').addEventListener('click', ()=> enterModule('inventaire'));
+document.getElementById('chooseDirection').addEventListener('click', ()=> enterModule('direction'));
 document.getElementById('toggleStaffLink').addEventListener('click', (e)=>{
   e.preventDefault();
   const staffEl = document.getElementById('staffChoices');
