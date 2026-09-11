@@ -3040,12 +3040,18 @@ function renderMyOrders(){
 
 function proofBoxHTML(o){
   if(o.statut !== 'validee') return '';
+  if(o.paiementCash){
+    return "<p class=\"hint\" style=\"color:var(--gold);margin-top:10px;\">💵 Paiement en personne choisi — réglez directement avec un membre de l'équipe.</p>";
+  }
   return '<div class="add-grid" style="margin-top:10px;">' +
     '<div class="field wide"><label>Preuve de paiement — lien ou référence</label><input type="text" class="proof-input" data-ref="' + o.ref + '" value="' + escapeHtml(o.preuvePaiement||'') + '" placeholder="Ex. référence du virement"></div>' +
     "<div class=\"field wide\"><label>Ou capture d'écran (photo)</label><input type=\"file\" accept=\"image/*\" class=\"proof-file\" data-ref=\"" + o.ref + "\"></div>" +
     '<button class="btn secondary proof-submit" data-ref="' + o.ref + '" type="button">Envoyer la preuve</button>' +
     '</div>' +
-    '<p class="hint proof-status" data-ref="' + o.ref + '">' + (o.preuvePaiement ? '<span style="color:var(--ok);">Preuve envoyée, en attente de vérification par le staff.</span>' : '') + '</p>';
+    '<p class="hint proof-status" data-ref="' + o.ref + '">' + (o.preuvePaiement ? '<span style="color:var(--ok);">Preuve envoyée, en attente de vérification par le staff.</span>' : '') + '</p>' +
+    '<div class="add-actions" style="justify-content:flex-start;margin-top:6px;">' +
+    '<button class="btn secondary cash-choice" data-ref="' + o.ref + '" type="button">Je préfère payer en personne (pas de virement)</button>' +
+    '</div>';
 }
 
 function dispoBoxHTML(o){
@@ -3117,6 +3123,23 @@ function wireProofSubmit(container, getOrder, onDone){
         if(onDone) onDone();
       }catch(e){
         statusEl.innerHTML = "<span style=\"color:var(--accent);\">Erreur lors de l'envoi.</span>";
+        btn.disabled = false;
+      }
+    });
+  });
+
+  container.querySelectorAll('.cash-choice').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const ref = btn.getAttribute('data-ref');
+      const order = getOrder(ref);
+      if(!order) return;
+      btn.disabled = true;
+      try{
+        await db.ref('commandes/' + ref).update({ paiementCash: true });
+        order.paiementCash = true;
+        await sendDiscordThreadMessage(order, '💵 Le client préfère payer **en personne** (pas de virement) à la remise de la commande.');
+        if(onDone) onDone();
+      }catch(e){
         btn.disabled = false;
       }
     });
@@ -3285,7 +3308,8 @@ function openCommandeDetail(order){
     (order.clientWebhook ? '<p style="padding:0 24px 4px;">Webhook client : configuré ✓</p>' : '') +
     '<p style="padding:0 24px 4px;">Souhaite : ' + (order.modeLivraison === 'livraison' ? '🚚 Être livré' : '🍱 Récupérer sur place') + '</p>' +
     (order.prete ? '<p style="padding:0 24px 4px;color:var(--gold);font-weight:bold;">' + (order.modeLivraison === 'livraison' ? '🚚 Commande marquée prête (livraison)' : '🍱 Commande marquée prête (récupération)') + '</p>' : '') +
-    (order.disponibilite ? '<p style="padding:0 24px 12px;color:var(--gold);">📅 Disponibilité du client : ' + escapeHtml(order.disponibilite) + '</p>' : '');
+    (order.disponibilite ? '<p style="padding:0 24px 12px;color:var(--gold);">📅 Disponibilité du client : ' + escapeHtml(order.disponibilite) + '</p>' : '') +
+    (order.paiementCash ? '<p style="padding:0 24px 12px;color:var(--gold);font-weight:bold;">💵 Le client paiera en personne (pas de virement attendu)</p>' : '');
   const isPending = order.statut === 'en_attente';
   const isValidee = order.statut === 'validee';
   const canMarkReady = (order.statut === 'validee' || order.statut === 'payee') && !order.prete;
