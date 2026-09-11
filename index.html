@@ -1149,6 +1149,7 @@
   <div class="wrap">
     <div class="session-bar">
       <button id="cmdBackBtn">← Accueil</button>
+      <button id="cmdNewOrderBtn">Passer une commande</button>
       <button id="cmdTrackBtn">Suivre ma commande</button>
     </div>
 
@@ -2560,13 +2561,22 @@ async function discordPost(payload, threadId, threadName){
   if(!DISCORD_WEBHOOK_URL) return null;
   let url = DISCORD_WEBHOOK_URL + '?wait=true';
   if(threadId) url += '&thread_id=' + threadId;
-  if(threadName) payload = Object.assign({}, payload, { thread_name: threadName.slice(0, 90) });
+  const withThreadName = threadName ? Object.assign({}, payload, { thread_name: threadName.slice(0, 90) }) : payload;
   try{
-    const res = await fetch(url, {
+    let res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(withThreadName)
     });
+    if(!res.ok && threadName){
+      // Le salon n'est probablement pas un salon "Forum" : Discord refuse thread_name.
+      // On retente sans créer de fil, pour que le message parte quand même.
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }
     if(!res.ok) return null;
     return await res.json();
   }catch(e){ console.error('Erreur webhook Discord', e); return null; }
@@ -2583,8 +2593,13 @@ async function sendDiscordMessage(content, pingRole){
 
 // Envoie un message dans le fil Discord d'une commande (si le fil existe)
 async function sendDiscordThreadMessage(order, content){
-  if(!order || !order.discordThreadId) return;
-  await discordPost({ content }, order.discordThreadId);
+  if(!order) return;
+  const withRef = '**Réf. ' + order.ref + ' — ' + order.client + '**\n' + content;
+  if(order.discordThreadId){
+    await discordPost({ content }, order.discordThreadId);
+  }else{
+    await discordPost({ content: withRef });
+  }
 }
 
 // Envoie une notification au client sur son propre webhook Discord, s'il en a fourni un
@@ -2868,11 +2883,12 @@ async function renderMyOrders(){
   host.innerHTML = orders.map(o => {
     const docType = (o.statut === 'validee' || o.statut === 'payee') ? 'FACTURE' : 'DEVIS';
     const proofBox = (o.statut === 'validee') ?
-      '<div class="add-grid" style="grid-template-columns:1fr auto;margin-top:10px;">' +
-      '<div class="field"><label>Preuve de paiement (lien, capture, référence de virement)</label><input type="text" class="proof-input" data-ref="' + o.ref + '" value="' + escapeHtml(o.preuvePaiement||'') + '" placeholder="Ex. lien vers la capture, ou référence du virement"></div>' +
-      '<button class="btn secondary proof-submit" data-ref="' + o.ref + '" type="button" style="align-self:end;">Envoyer</button>' +
+      '<div class="add-grid" style="margin-top:10px;">' +
+      '<div class="field wide"><label>Preuve de paiement — lien ou référence</label><input type="text" class="proof-input" data-ref="' + o.ref + '" value="' + escapeHtml(o.preuvePaiement||'') + '" placeholder="Ex. référence du virement"></div>' +
+      "<div class=\"field wide\"><label>Ou capture d'écran (photo)</label><input type=\"file\" accept=\"image/*\" class=\"proof-file\" data-ref=\"" + o.ref + "\"></div>" +
+      '<button class="btn secondary proof-submit" data-ref="' + o.ref + '" type="button">Envoyer la preuve</button>' +
       '</div>' +
-      (o.preuvePaiement ? '<p class="hint" style="color:var(--ok);">Preuve envoyée, en attente de vérification par le staff.</p>' : '') : '';
+      '<p class="hint proof-status" data-ref="' + o.ref + '">' + (o.preuvePaiement ? '<span style="color:var(--ok);">Preuve envoyée, en attente de vérification par le staff.</span>' : '') + '</p>' : '';
     return '<div class="chart-box" style="margin:14px 0;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;">' +
       '<b>' + escapeHtml(o.client) + '</b> — <span class="hint">' + escapeHtml(o.ref) + '</span>' +
@@ -2906,15 +2922,51 @@ async function renderMyOrders(){
     btn.addEventListener('click', async ()=>{
       const ref = btn.getAttribute('data-ref');
       const input = host.querySelector('.proof-input[data-ref="' + ref + '"]');
-      const proof = input.value.trim();
-      if(!proof || !db) return;
+      const fileInput = host.querySelector('.proof-file[data-ref="' + ref + '"]');
+      const statusEl = host.querySelector('.proof-status[data-ref="' + ref + '"]');
+      const textProof = input.value.trim();
+      const file = fileInput.files[0];
+      if(!textProof && !file){ statusEl.innerHTML = "<span style=\"color:var(--accent);\">Ajoute un lien ou une capture avant d'envoyer.</span>"; return; }
       const order = orders.find(o=>o.ref===ref);
-      await db.ref('commandes/' + ref).update({ preuvePaiement: proof });
-      order.preuvePaiement = proof;
-      await notifyOrderUpdate(order, '💳 Le client a soumis une preuve de paiement : ' + proof);
-      renderMyOrders();
+      btn.disabled = true;
+      statusEl.textContent = 'Envoi en cours…';
+      try{
+        let proofValue = textProof;
+        if(file){
+          const uploadedUrl = await uploadProofPhoto(order, file);
+          if(uploadedUrl) proofValue = uploadedUrl;
+        }
+        await db.ref('commandes/' + ref).update({ preuvePaiement: proofValue });
+        order.preuvePaiement = proofValue;
+        if(!file){
+          await notifyOrderUpdate(order, '💳 Le client a soumis une preuve de paiement : ' + proofValue);
+        }
+        renderMyOrders();
+      }catch(e){
+        statusEl.innerHTML = "<span style=\"color:var(--accent);\">Erreur lors de l'envoi.</span>";
+        btn.disabled = false;
+      }
     });
   });
+}
+
+// Envoie la capture d'écran comme pièce jointe dans le fil Discord de la commande (ou le salon principal),
+// et retourne l'URL de l'image hébergée par Discord pour la conserver comme preuve
+async function uploadProofPhoto(order, file){
+  if(!DISCORD_WEBHOOK_URL) return null;
+  try{
+    const formData = new FormData();
+    formData.append('payload_json', JSON.stringify({
+      content: '💳 **Preuve de paiement** envoyée par le client pour la réf. ' + order.ref
+    }));
+    formData.append('files[0]', file, file.name || 'preuve.png');
+    let url = DISCORD_WEBHOOK_URL + '?wait=true';
+    if(order.discordThreadId) url += '&thread_id=' + order.discordThreadId;
+    const res = await fetch(url, { method: 'POST', body: formData });
+    if(!res.ok) return null;
+    const msg = await res.json();
+    return (msg.attachments && msg.attachments[0]) ? msg.attachments[0].url : null;
+  }catch(e){ console.error('Erreur upload preuve', e); return null; }
 }
 
 async function downloadDevisPDF(el, refName){
@@ -2935,6 +2987,12 @@ document.getElementById('cmdTrackBtn').addEventListener('click', ()=>{
   document.getElementById('cmdDevisPanel').style.display = 'none';
   document.getElementById('cmdTrackPanel').style.display = 'block';
   renderMyOrders();
+});
+
+document.getElementById('cmdNewOrderBtn').addEventListener('click', ()=>{
+  document.getElementById('cmdTrackPanel').style.display = 'none';
+  document.getElementById('cmdDevisPanel').style.display = 'none';
+  document.getElementById('cmdFormPanel').style.display = 'block';
 });
 
 document.getElementById('cmdTrackSearchBtn').addEventListener('click', async ()=>{
