@@ -1084,6 +1084,7 @@
     <div class="add-actions">
       <button class="btn secondary" id="commandeDetailClose" type="button">Fermer</button>
       <button class="btn secondary" id="commandeRefuseBtn" type="button" style="border-color:var(--accent);color:var(--accent);">Refuser</button>
+      <button class="btn secondary" id="commandePaidBtn" type="button" style="border-color:var(--ok);color:var(--ok);display:none;">Marquer payée</button>
       <button class="btn" id="commandeAcceptBtn" type="button">Accepter</button>
     </div>
   </section>
@@ -2557,13 +2558,17 @@ function renderCmdSummary(){
 function generateDevisHTML(order, docType){
   const dateStr = new Date(order.ts).toLocaleDateString('fr-FR');
   const zoneLabel = order.zone;
+  const logoSrc = document.getElementById('headerLogo') ? document.getElementById('headerLogo').src : '';
   const rows = order.lignes.map(l =>
     '<tr><td>' + escapeHtml(l.nom) + '</td><td style="text-align:center;">' + l.qte + '</td><td style="text-align:right;">' + formatMoneyPlain(l.prixUnitaire) + '</td><td style="text-align:right;">' + formatMoneyPlain(l.prixTotal) + '</td></tr>'
   ).join('');
   return '' +
     '<div style="font-family:Helvetica,Arial,sans-serif;color:#222;background:#fff;padding:24px;">' +
-    '<h2 style="margin:0;">Restaurant Umami</h2>' +
-    '<p style="margin:2px 0;">Banque de Los Santos — RIB : 20050</p>' +
+    '<div style="display:flex;align-items:center;gap:14px;">' +
+    (logoSrc ? '<img src="' + logoSrc + '" alt="Umami" style="width:56px;height:56px;">' : '') +
+    '<div><h2 style="margin:0;">Restaurant Umami</h2>' +
+    '<p style="margin:2px 0;">Banque de Los Santos — RIB : 20050</p></div>' +
+    '</div>' +
     '<h1 style="margin:18px 0 4px;">' + docType + '</h1>' +
     '<p>Éditée le : ' + dateStr + (order.ref ? ' — Réf. ' + escapeHtml(order.ref) : '') + '</p>' +
     '<p><b>Client :</b> ' + escapeHtml(order.client) + '<br><b>Zone fiscale :</b> ' + escapeHtml(zoneLabel) + '</p>' +
@@ -2575,7 +2580,8 @@ function generateDevisHTML(order, docType){
     '<p style="text-align:right;font-size:1.2em;">TTC : <b>' + formatMoneyPlain(order.ttc) + '</b></p>' +
     (order.statut === 'refusee' ? '<p style="color:#b3402a;font-weight:bold;">Commande refusée' + (order.raisonRefus ? ' — ' + escapeHtml(order.raisonRefus) : '') + '</p>' : '') +
     (order.statut === 'en_attente' ? '<p style="color:#c98a2d;font-weight:bold;">En attente de validation par notre équipe. Ceci est un devis, pas encore une facture officielle.</p>' : '') +
-    (order.statut === 'validee' ? '<p style="color:#5c8a5c;font-weight:bold;">Commande validée ✓</p>' : '') +
+    (order.statut === 'validee' ? '<p style="color:#5c8a5c;font-weight:bold;">Commande validée ✓ — En attente de paiement</p>' : '') +
+    (order.statut === 'payee' ? '<p style="color:#5c8a5c;font-weight:bold;font-size:1.15em;">FACTURE PAYÉE ✓</p>' : '') +
     '</div>';
 }
 
@@ -2667,7 +2673,7 @@ document.getElementById('cmdTrackSearchBtn').addEventListener('click', async ()=
     const snap = await db.ref('commandes/' + refInput).once('value');
     const order = snap.val();
     if(!order){ resultEl.innerHTML = '<p class="hint">Aucune commande trouvée avec cette référence.</p>'; return; }
-    const docType = order.statut === 'validee' ? 'FACTURE' : 'DEVIS';
+    const docType = (order.statut === 'validee' || order.statut === 'payee') ? 'FACTURE' : 'DEVIS';
     resultEl.innerHTML = generateDevisHTML(order, docType);
   }catch(e){
     resultEl.innerHTML = '<p class="hint">Erreur de recherche.</p>';
@@ -2686,7 +2692,7 @@ async function renderCommandesList(){
       host.innerHTML = '<p class="hint">Aucune commande pour le moment.</p>';
       return;
     }
-    const STATUT_LABEL = { en_attente:'⏳ En attente', validee:'✅ Validée', refusee:'❌ Refusée' };
+    const STATUT_LABEL = { en_attente:'⏳ En attente', validee:'✅ Validée', payee:'💰 Payée', refusee:'❌ Refusée' };
     host.innerHTML = orders.map(o =>
       '<div class="hist-row" style="grid-template-columns:130px 1fr 100px 120px;cursor:pointer;" data-ref="' + o.ref + '">' +
       '<span class="hist-date">' + new Date(o.ts).toLocaleDateString('fr-FR') + '</span>' +
@@ -2711,11 +2717,13 @@ async function renderCommandesList(){
 let currentDetailOrder = null;
 function openCommandeDetail(order){
   currentDetailOrder = order;
-  document.getElementById('commandeDetailContent').innerHTML = generateDevisHTML(order, order.statut==='validee' ? 'FACTURE' : 'DEVIS') +
+  document.getElementById('commandeDetailContent').innerHTML = generateDevisHTML(order, (order.statut==='validee'||order.statut==='payee') ? 'FACTURE' : 'DEVIS') +
     (order.contact ? '<p style="padding:0 24px 12px;">Contact : ' + escapeHtml(order.contact) + '</p>' : '');
   const isPending = order.statut === 'en_attente';
+  const isValidee = order.statut === 'validee';
   document.getElementById('commandeAcceptBtn').style.display = isPending ? 'inline-block' : 'none';
   document.getElementById('commandeRefuseBtn').style.display = isPending ? 'inline-block' : 'none';
+  document.getElementById('commandePaidBtn').style.display = isValidee ? 'inline-block' : 'none';
   document.getElementById('commandeDetailModal').style.display = 'flex';
 }
 
@@ -2745,6 +2753,15 @@ document.getElementById('commandeRefuseBtn').addEventListener('click', async ()=
   await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'refusee', raisonRefus: raison });
   logAction('Commande refusée', currentDetailOrder.client + (raison ? ' — ' + raison : ''));
   await sendDiscordMessage('❌ Commande de **' + currentDetailOrder.client + '** refusée (réf. `' + currentDetailOrder.ref + '`)' + (raison ? ' — ' + raison : ''));
+  document.getElementById('commandeDetailModal').style.display = 'none';
+  renderCommandesList();
+});
+
+document.getElementById('commandePaidBtn').addEventListener('click', async ()=>{
+  if(!currentDetailOrder || !db) return;
+  await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'payee' });
+  logAction('Commande marquée payée', currentDetailOrder.client + ' — ' + formatMoneyPlain(currentDetailOrder.ttc));
+  await sendDiscordMessage('💰 Commande de **' + currentDetailOrder.client + '** marquée **payée** (réf. `' + currentDetailOrder.ref + '`).');
   document.getElementById('commandeDetailModal').style.display = 'none';
   renderCommandesList();
 });
