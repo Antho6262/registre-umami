@@ -597,6 +597,14 @@
   .landing-choices{
     display:flex; gap:20px; justify-content:center; flex-wrap:wrap;
   }
+  .staff-link{
+    margin-top:34px;
+    font-family:'Helvetica Neue',Arial,sans-serif; font-size:11.5px;
+  }
+  .staff-link a{
+    color:var(--text-muted); text-decoration:underline; cursor:pointer;
+  }
+  .staff-link a:hover{ color:var(--gold); }
   .landing-card{
     width:260px;
     background:rgba(28,24,21,0.75);
@@ -722,8 +730,16 @@
   <div class="landing-inner">
     <p class="landing-eyebrow">Umami Marina · Umami Chilliad</p>
     <h1 class="landing-title">UMAMI</h1>
-    <p class="landing-sub">Espace interne — choisis un module</p>
-    <div class="landing-choices">
+    <p class="landing-sub" id="landingSub">Passez votre commande en quelques clics</p>
+
+    <div class="landing-choices" id="publicChoices">
+      <button class="landing-card" id="chooseCommande">
+        <span class="lc-title">Commander</span>
+        <span class="lc-desc">Devis et commandes pour votre entreprise, famille ou groupe</span>
+      </button>
+    </div>
+
+    <div class="landing-choices" id="staffChoices" style="display:none;">
       <button class="landing-card" id="chooseRegistre">
         <span class="lc-title">Registre du personnel</span>
         <span class="lc-desc">Historique des départs, personnel actif, liste noire</span>
@@ -732,11 +748,13 @@
         <span class="lc-title">Inventaire</span>
         <span class="lc-desc">Stocks et gestion des articles</span>
       </button>
-      <button class="landing-card" id="chooseCommande">
-        <span class="lc-title">Commander</span>
-        <span class="lc-desc">Espace client — devis et commandes entreprise</span>
+      <button class="landing-card" id="chooseDirection">
+        <span class="lc-title">Direction</span>
+        <span class="lc-desc">Validation des commandes clients</span>
       </button>
     </div>
+
+    <p class="staff-link"><a href="#" id="toggleStaffLink">Accès staff</a></p>
   </div>
 </div>
 
@@ -880,7 +898,6 @@
     <button id="changePwBtn">Changer mon mot de passe</button>
     <button id="manageMembersBtn" style="display:none;">Gérer les membres</button>
     <button id="histBtn">Historique</button>
-    <button id="commandesBtn">📋 Commandes <span class="count" id="commandesPendingBadge" style="display:none;"></span></button>
     <button class="themeToggle">Thème clair/sombre</button>
     <button class="presentToggle">Mode présentation</button>
     <button id="exportBtn">Exporter CSV</button>
@@ -1069,14 +1086,6 @@
 <div id="savingIndicator" class="saving-indicator"></div>
 <div id="undoToast"></div>
 
-<div class="modal-backdrop" id="commandesPanel" style="display:none;">
-  <section class="members-panel" style="max-width:900px;">
-    <h2>Commandes clients</h2>
-    <div id="commandesList" class="hist-list"></div>
-    <div class="add-actions"><button class="btn secondary" id="commandesPanelClose" type="button">Fermer</button></div>
-  </section>
-</div>
-
 <div class="modal-backdrop" id="commandeDetailModal" style="display:none;">
   <section class="members-panel" style="max-width:640px;">
     <h2>Détail de la commande</h2>
@@ -1088,6 +1097,37 @@
       <button class="btn" id="commandeAcceptBtn" type="button">Accepter</button>
     </div>
   </section>
+</div>
+
+<div id="directionMain" style="display:none;">
+  <header class="top">
+    <div class="inner">
+      <div style="display:flex;align-items:center;gap:22px;">
+        <img class="header-logo-small" src="" alt="Umami" style="width:64px;height:64px;flex-shrink:0;">
+        <div>
+          <p class="brand-mark">Umami Marina · Umami Chilliad</p>
+          <h1>Direction</h1>
+          <p class="subtitle">Validation des commandes clients.</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="session-bar">
+      Connecté en tant que <b id="dirSessionName">—</b>
+      <button id="dirChangePwBtn">Changer mon mot de passe</button>
+      <button id="dirManageMembersBtn" style="display:none;">Gérer les membres</button>
+      <button class="themeToggle">Thème clair/sombre</button>
+      <button id="dirBackBtn">← Accueil</button>
+      <button id="dirLogoutBtn">Déconnexion</button>
+    </div>
+
+    <p class="result-count" id="commandesResultCount"></p>
+    <div id="commandesList" class="hist-list"></div>
+
+    <footer>Umami — usage interne</footer>
+  </div>
 </div>
 
 <div id="commandeMain" style="display:none;">
@@ -1151,7 +1191,7 @@
 
     <div id="cmdTrackPanel" style="display:none;">
       <div class="add-grid" style="grid-template-columns:1fr auto;">
-        <div class="field"><label>Référence de commande</label><input type="text" id="cmd-ref-input" placeholder="Ex. -Nabc123"></div>
+        <div class="field"><label>Référence de commande</label><input type="text" id="cmd-ref-input" placeholder="Ex. CMD-0001"></div>
         <button class="btn secondary" id="cmdTrackSearchBtn" type="button" style="align-self:end;">Rechercher</button>
       </div>
       <div id="cmdTrackResult"></div>
@@ -1421,7 +1461,8 @@ async function hashPassword(password, salt){
 }
 
 function membersRef(){
-  return db.ref(currentApp === 'inventaire' ? 'membres_inventaire' : 'membres');
+  const path = currentApp === 'inventaire' ? 'membres_inventaire' : currentApp === 'direction' ? 'membres_direction' : 'membres';
+  return db.ref(path);
 }
 
 async function fetchMembers(){
@@ -1431,7 +1472,7 @@ async function fetchMembers(){
 }
 
 function sessionKey(){
-  return currentApp === 'inventaire' ? 'umami_session_inventaire' : 'umami_session_registre';
+  return 'umami_session_' + (currentApp || 'registre');
 }
 
 function showLanding(){
@@ -1439,6 +1480,7 @@ function showLanding(){
   document.getElementById('authOverlay').style.display = 'none';
   document.getElementById('appMain').style.display = 'none';
   document.getElementById('inventaireMain').style.display = 'none';
+  document.getElementById('directionMain').style.display = 'none';
 }
 function showAuthScreen(){
   document.getElementById('landingScreen').style.display = 'none';
@@ -1790,6 +1832,12 @@ function enterApp(){
     document.getElementById('invSessionName').textContent = currentUser.nom + (currentUser.readOnly ? ' (lecture seule)' : '');
     document.getElementById('invManageMembersBtn').style.display = currentUser.isAdmin ? 'inline-block' : 'none';
     initInventoryUI();
+  }else if(currentApp === 'direction'){
+    document.getElementById('landingScreen').style.display = 'none';
+    document.getElementById('directionMain').style.display = 'block';
+    document.getElementById('dirSessionName').textContent = currentUser.nom;
+    document.getElementById('dirManageMembersBtn').style.display = currentUser.isAdmin ? 'inline-block' : 'none';
+    renderCommandesList();
   }else{
     document.getElementById('landingScreen').style.display = 'none';
     document.getElementById('appMain').style.display = 'block';
@@ -1860,6 +1908,12 @@ async function initAuth(app){
 
 document.getElementById('chooseRegistre').addEventListener('click', ()=> initAuth('registre'));
 document.getElementById('chooseInventaire').addEventListener('click', ()=> initAuth('inventaire'));
+document.getElementById('chooseDirection').addEventListener('click', ()=> initAuth('direction'));
+document.getElementById('toggleStaffLink').addEventListener('click', (e)=>{
+  e.preventDefault();
+  const el = document.getElementById('staffChoices');
+  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+});
 document.getElementById('authBack').addEventListener('click', ()=> showLanding());
 document.getElementById('invBackBtn').addEventListener('click', ()=> clearSession());
 document.getElementById('invLogoutBtn').addEventListener('click', ()=> clearSession());
@@ -2367,6 +2421,24 @@ try{
   }catch(e){}
 })();
 
+(async function checkPendingOrdersBadge(){
+  if(!db) return;
+  try{
+    const snap = await db.ref('commandes').once('value');
+    const val = snap.val();
+    if(!val) return;
+    const orders = Object.values(val);
+    const pending = orders.filter(o => o.statut === 'en_attente').length;
+    if(pending > 0){
+      const badge = document.createElement('span');
+      badge.className = 'lc-alert-badge';
+      badge.textContent = pending;
+      badge.title = pending + ' commande(s) en attente';
+      document.getElementById('chooseDirection').appendChild(badge);
+    }
+  }catch(e){}
+})();
+
 /* ---- Raccourci Ctrl+F : focus la recherche active ---- */
 document.addEventListener('keydown', (e)=>{
   if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f'){
@@ -2625,15 +2697,18 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
   if(!db){ errEl.textContent = 'Connexion indisponible, réessaie plus tard.'; return; }
   showSaving();
   try{
-    const ref = db.ref('commandes').push();
-    order.ref = ref.key;
-    await ref.set(order);
+    const counterRef = db.ref('commandes_meta/compteur');
+    const txResult = await counterRef.transaction(cur => (cur || 0) + 1);
+    const num = txResult.snapshot.val();
+    const refKey = 'CMD-' + String(num).padStart(4, '0');
+    order.ref = refKey;
+    await db.ref('commandes/' + refKey).set(order);
     hideSaving();
 
     await sendDiscordMessage(
       '📥 **Nouvelle commande** de **' + client + '** (' + zone + ')\n' +
       lignes.map(l => '• ' + l.nom + ' x' + l.qte + ' — ' + formatMoneyPlain(l.prixTotal)).join('\n') +
-      '\n**Total TTC : ' + formatMoneyPlain(ttc) + '**\nRéférence : `' + ref.key + '`' +
+      '\n**Total TTC : ' + formatMoneyPlain(ttc) + '**\nRéférence : `' + refKey + '`' +
       (contact ? '\nContact : ' + contact : ''),
       true
     );
@@ -2683,16 +2758,19 @@ document.getElementById('cmdTrackSearchBtn').addEventListener('click', async ()=
 /* ---- Gestion des commandes côté staff ---- */
 async function renderCommandesList(){
   const host = document.getElementById('commandesList');
+  const countEl = document.getElementById('commandesResultCount');
   if(!db){ host.innerHTML = '<p class="hint">Pas de connexion.</p>'; return; }
   try{
     const snap = await db.ref('commandes').once('value');
     const val = snap.val() || {};
     const orders = Object.values(val).sort((a,b)=>b.ts-a.ts);
     if(orders.length === 0){
+      if(countEl) countEl.textContent = '';
       host.innerHTML = '<p class="hint">Aucune commande pour le moment.</p>';
       return;
     }
     const STATUT_LABEL = { en_attente:'⏳ En attente', validee:'✅ Validée', payee:'💰 Payée', refusee:'❌ Refusée' };
+    if(countEl) countEl.textContent = orders.length + ' commande' + (orders.length>1?'s':'') + ' au total';
     host.innerHTML = orders.map(o =>
       '<div class="hist-row" style="grid-template-columns:130px 1fr 100px 120px;cursor:pointer;" data-ref="' + o.ref + '">' +
       '<span class="hist-date">' + new Date(o.ts).toLocaleDateString('fr-FR') + '</span>' +
@@ -2704,11 +2782,6 @@ async function renderCommandesList(){
     host.querySelectorAll('[data-ref]').forEach(row=>{
       row.addEventListener('click', ()=> openCommandeDetail(orders.find(o=>o.ref===row.getAttribute('data-ref'))));
     });
-
-    const pending = orders.filter(o=>o.statut==='en_attente').length;
-    const badge = document.getElementById('commandesPendingBadge');
-    if(pending > 0){ badge.style.display = 'inline-block'; badge.textContent = pending; }
-    else{ badge.style.display = 'none'; }
   }catch(e){
     host.innerHTML = '<p class="hint">Erreur de chargement.</p>';
   }
@@ -2727,13 +2800,10 @@ function openCommandeDetail(order){
   document.getElementById('commandeDetailModal').style.display = 'flex';
 }
 
-document.getElementById('commandesBtn').addEventListener('click', ()=>{
-  document.getElementById('commandesPanel').style.display = 'flex';
-  renderCommandesList();
-});
-document.getElementById('commandesPanelClose').addEventListener('click', ()=>{
-  document.getElementById('commandesPanel').style.display = 'none';
-});
+document.getElementById('dirBackBtn').addEventListener('click', ()=> clearSession());
+document.getElementById('dirLogoutBtn').addEventListener('click', ()=> clearSession());
+document.getElementById('dirChangePwBtn').addEventListener('click', openPwPanel);
+document.getElementById('dirManageMembersBtn').addEventListener('click', openMembersPanel);
 document.getElementById('commandeDetailClose').addEventListener('click', ()=>{
   document.getElementById('commandeDetailModal').style.display = 'none';
 });
