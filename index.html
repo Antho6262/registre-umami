@@ -2874,6 +2874,7 @@ function generateDevisHTML(order, docType){
     (order.statut === 'en_attente' ? '<p style="color:#c98a2d;font-weight:bold;">En attente de validation par notre équipe. Ceci est un devis, pas encore une facture officielle.</p>' : '') +
     (order.statut === 'validee' ? '<p style="color:#5c8a5c;font-weight:bold;">Commande validée ✓ — En attente de paiement</p>' : '') +
     (order.statut === 'payee' ? '<p style="color:#5c8a5c;font-weight:bold;font-size:1.15em;">FACTURE PAYÉE ✓</p>' : '') +
+    (order.paiementCash ? '<p style="color:#c98a2d;font-weight:bold;">💵 Le client paie en personne (pas de virement)</p>' : '') +
     '</div>';
 }
 
@@ -3308,8 +3309,7 @@ function openCommandeDetail(order){
     (order.clientWebhook ? '<p style="padding:0 24px 4px;">Webhook client : configuré ✓</p>' : '') +
     '<p style="padding:0 24px 4px;">Souhaite : ' + (order.modeLivraison === 'livraison' ? '🚚 Être livré' : '🍱 Récupérer sur place') + '</p>' +
     (order.prete ? '<p style="padding:0 24px 4px;color:var(--gold);font-weight:bold;">' + (order.modeLivraison === 'livraison' ? '🚚 Commande marquée prête (livraison)' : '🍱 Commande marquée prête (récupération)') + '</p>' : '') +
-    (order.disponibilite ? '<p style="padding:0 24px 12px;color:var(--gold);">📅 Disponibilité du client : ' + escapeHtml(order.disponibilite) + '</p>' : '') +
-    (order.paiementCash ? '<p style="padding:0 24px 12px;color:var(--gold);font-weight:bold;">💵 Le client paiera en personne (pas de virement attendu)</p>' : '');
+    (order.disponibilite ? '<p style="padding:0 24px 12px;color:var(--gold);">📅 Disponibilité du client : ' + escapeHtml(order.disponibilite) + '</p>' : '');
   const isPending = order.statut === 'en_attente';
   const isValidee = order.statut === 'validee';
   const canMarkReady = (order.statut === 'validee' || order.statut === 'payee') && !order.prete;
