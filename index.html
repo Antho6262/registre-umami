@@ -1096,8 +1096,7 @@
       <button class="btn secondary" id="commandeDetailClose" type="button">Fermer</button>
       <button class="btn secondary" id="commandeRefuseBtn" type="button" style="border-color:var(--accent);color:var(--accent);">Refuser</button>
       <button class="btn secondary" id="commandePaidBtn" type="button" style="border-color:var(--ok);color:var(--ok);display:none;">Marquer payée</button>
-      <button class="btn secondary" id="commandePretRecupBtn" type="button" style="border-color:var(--gold);color:var(--gold);display:none;">🍱 Prête à récupérer</button>
-      <button class="btn secondary" id="commandePretLivraisonBtn" type="button" style="border-color:var(--gold);color:var(--gold);display:none;">🚚 Prête (livraison)</button>
+      <button class="btn secondary" id="commandePretBtn" type="button" style="border-color:var(--gold);color:var(--gold);display:none;">Commande prête</button>
       <button class="btn" id="commandeAcceptBtn" type="button">Accepter</button>
     </div>
   </section>
@@ -1165,6 +1164,13 @@
             <option value="Sud" selected>Sud</option>
             <option value="Nord">Nord</option>
             <option value="Cayo">Cayo</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Retrait ou livraison</label>
+          <select id="cmd-livraison">
+            <option value="recuperation" selected>Je viens récupérer</option>
+            <option value="livraison">Je souhaite être livré</option>
           </select>
         </div>
         <div class="field wide"><label>Lien webhook Discord (optionnel, pour recevoir les notifications d'avancée de votre commande dans votre salon)</label><input type="text" id="cmd-contact" placeholder="Ex. https://discord.com/api/webhooks/..."></div>
@@ -2799,6 +2805,7 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
   const tel = document.getElementById('cmd-tel').value.trim();
   const clientWebhook = document.getElementById('cmd-contact').value.trim();
   const zone = document.getElementById('cmd-zone').value;
+  const modeLivraison = document.getElementById('cmd-livraison').value;
   const errEl = document.getElementById('cmd-error');
   errEl.textContent = '';
   const lignes = cmdSelectedLines();
@@ -2810,7 +2817,7 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
   const poids = lignes.reduce((s,l)=>s+l.qte, 0);
 
   const order = {
-    client, tel, clientWebhook, zone, lignes,
+    client, tel, clientWebhook, zone, modeLivraison, lignes,
     sousTotalHT, ttc, poids,
     ts: Date.now(),
     statut: 'en_attente'
@@ -2826,7 +2833,7 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
     order.ref = refKey;
 
     const pingText = (DISCORD_ROLE_ID ? ('<@&' + DISCORD_ROLE_ID + '> ') : '') +
-      '📥 **Nouvelle commande** de **' + client + '** (' + zone + ')\n' +
+      '📥 **Nouvelle commande** de **' + client + '** (' + zone + ' — ' + (modeLivraison === 'livraison' ? '🚚 Livraison' : '🍱 Retrait sur place') + ')\n' +
       lignes.map(l => '• ' + l.nom + ' x' + l.qte + ' — ' + formatMoneyPlain(l.prixTotal)).join('\n') +
       '\n**Total TTC : ' + formatMoneyPlain(ttc) + '**\nRéférence : `' + refKey + '`' +
       (tel ? '\nTéléphone : ' + tel : '') +
@@ -2863,8 +2870,9 @@ function startLiveDevisView(refKey){
     if(!order) return;
     const docType = (order.statut === 'validee' || order.statut === 'payee') ? 'FACTURE' : 'DEVIS';
     const host = document.getElementById('cmdDevisContent');
-    host.innerHTML = generateDevisHTML(order, docType) + proofBoxHTML(order);
+    host.innerHTML = generateDevisHTML(order, docType) + proofBoxHTML(order) + dispoBoxHTML(order);
     wireProofSubmit(host, () => order, () => startLiveDevisView(refKey));
+    wireDispoSubmit(host, () => order, () => startLiveDevisView(refKey));
   });
 }
 
@@ -2936,6 +2944,48 @@ function proofBoxHTML(o){
     '<p class="hint proof-status" data-ref="' + o.ref + '">' + (o.preuvePaiement ? '<span style="color:var(--ok);">Preuve envoyée, en attente de vérification par le staff.</span>' : '') + '</p>';
 }
 
+function dispoBoxHTML(o){
+  if(!o.prete) return '';
+  const label = o.modeLivraison === 'livraison' ? 'Précise tes disponibilités pour la livraison' : 'Précise tes disponibilités pour venir récupérer la commande';
+  if(o.disponibilite){
+    return '<p class="hint" style="color:var(--gold);margin-top:10px;">📅 Disponibilité indiquée : ' + escapeHtml(o.disponibilite) + '</p>';
+  }
+  return '<div class="add-grid" style="margin-top:10px;">' +
+    '<div class="field wide"><label>' + label + '</label><input type="text" class="dispo-input" data-ref="' + o.ref + '" placeholder="Ex. à partir de 19h, ou je suis libre toute la soirée"></div>' +
+    '<button class="btn secondary dispo-now" data-ref="' + o.ref + '" type="button">Disponible maintenant</button>' +
+    '<button class="btn secondary dispo-submit" data-ref="' + o.ref + '" type="button">Envoyer</button>' +
+    '</div>' +
+    '<p class="hint dispo-status" data-ref="' + o.ref + '"></p>';
+}
+
+async function submitDispo(ref, getOrder, value, onDone){
+  const order = getOrder(ref);
+  if(!order || !value) return;
+  await db.ref('commandes/' + ref).update({ disponibilite: value });
+  order.disponibilite = value;
+  await sendDiscordThreadMessage(order, '📅 Le client a indiqué sa disponibilité : ' + value);
+  if(onDone) onDone();
+}
+
+function wireDispoSubmit(container, getOrder, onDone){
+  container.querySelectorAll('.dispo-now').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const ref = btn.getAttribute('data-ref');
+      submitDispo(ref, getOrder, 'Disponible immédiatement', onDone);
+    });
+  });
+  container.querySelectorAll('.dispo-submit').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const ref = btn.getAttribute('data-ref');
+      const input = container.querySelector('.dispo-input[data-ref="' + ref + '"]');
+      const statusEl = container.querySelector('.dispo-status[data-ref="' + ref + '"]');
+      const value = input.value.trim();
+      if(!value){ if(statusEl) statusEl.innerHTML = "<span style=\"color:var(--accent);\">Indique une disponibilité avant d'envoyer.</span>"; return; }
+      submitDispo(ref, getOrder, value, onDone);
+    });
+  });
+}
+
 function wireProofSubmit(container, getOrder, onDone){
   container.querySelectorAll('.proof-submit').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
@@ -2988,6 +3038,7 @@ function renderMyOrdersFromCache(){
       '</div>' +
       '<div class="order-doc" data-ref="' + o.ref + '" style="display:none;margin-top:10px;"></div>' +
       proofBoxHTML(o) +
+      dispoBoxHTML(o) +
       '</div>';
   }).join('');
 
@@ -3008,6 +3059,7 @@ function renderMyOrdersFromCache(){
   });
 
   wireProofSubmit(host, ref => orders.find(o=>o.ref===ref), () => renderMyOrders());
+  wireDispoSubmit(host, ref => orders.find(o=>o.ref===ref), () => renderMyOrders());
 }
 
 // Envoie la capture d'écran comme pièce jointe dans le fil Discord de la commande (ou le salon principal),
@@ -3127,15 +3179,16 @@ function openCommandeDetail(order){
   document.getElementById('commandeDetailContent').innerHTML = generateDevisHTML(order, (order.statut==='validee'||order.statut==='payee') ? 'FACTURE' : 'DEVIS') +
     (order.tel ? '<p style="padding:0 24px 4px;">Téléphone : ' + escapeHtml(order.tel) + '</p>' : '') +
     (order.clientWebhook ? '<p style="padding:0 24px 4px;">Webhook client : configuré ✓</p>' : '') +
-    (order.prete ? '<p style="padding:0 24px 12px;color:var(--gold);font-weight:bold;">' + (order.modeLivraison === 'livraison' ? '🚚 Commande marquée prête (livraison)' : '🍱 Commande marquée prête (récupération)') + '</p>' : '');
+    '<p style="padding:0 24px 4px;">Souhaite : ' + (order.modeLivraison === 'livraison' ? '🚚 Être livré' : '🍱 Récupérer sur place') + '</p>' +
+    (order.prete ? '<p style="padding:0 24px 4px;color:var(--gold);font-weight:bold;">' + (order.modeLivraison === 'livraison' ? '🚚 Commande marquée prête (livraison)' : '🍱 Commande marquée prête (récupération)') + '</p>' : '') +
+    (order.disponibilite ? '<p style="padding:0 24px 12px;color:var(--gold);">📅 Disponibilité du client : ' + escapeHtml(order.disponibilite) + '</p>' : '');
   const isPending = order.statut === 'en_attente';
   const isValidee = order.statut === 'validee';
   const canMarkReady = (order.statut === 'validee' || order.statut === 'payee') && !order.prete;
   document.getElementById('commandeAcceptBtn').style.display = isPending ? 'inline-block' : 'none';
   document.getElementById('commandeRefuseBtn').style.display = isPending ? 'inline-block' : 'none';
   document.getElementById('commandePaidBtn').style.display = isValidee ? 'inline-block' : 'none';
-  document.getElementById('commandePretRecupBtn').style.display = canMarkReady ? 'inline-block' : 'none';
-  document.getElementById('commandePretLivraisonBtn').style.display = canMarkReady ? 'inline-block' : 'none';
+  document.getElementById('commandePretBtn').style.display = canMarkReady ? 'inline-block' : 'none';
   document.getElementById('commandeDetailModal').style.display = 'flex';
 }
 
@@ -3179,22 +3232,21 @@ document.getElementById('commandePaidBtn').addEventListener('click', async ()=>{
   renderCommandesList();
 });
 
-async function markCommandePrete(mode){
+async function markCommandePrete(){
   if(!currentDetailOrder || !db) return;
-  await db.ref('commandes/' + currentDetailOrder.ref).update({ prete: true, modeLivraison: mode });
+  const mode = currentDetailOrder.modeLivraison || 'recuperation';
+  await db.ref('commandes/' + currentDetailOrder.ref).update({ prete: true });
   currentDetailOrder.prete = true;
-  currentDetailOrder.modeLivraison = mode;
   logAction('Commande marquée prête', currentDetailOrder.client + ' (' + (mode === 'livraison' ? 'livraison' : 'récupération') + ')');
   const msg = mode === 'livraison'
-    ? '🚚 Votre commande est **prête** et va vous être livrée !'
-    : '🍱 Votre commande est **prête** ! Vous pouvez venir la récupérer.';
+    ? '🚚 Votre commande est **prête** et va vous être livrée ! Merci de préciser tes disponibilités sur le site.'
+    : '🍱 Votre commande est **prête** ! Merci de préciser tes disponibilités sur le site pour venir la récupérer.';
   await notifyOrderUpdate(currentDetailOrder, msg);
   document.getElementById('commandeDetailModal').style.display = 'none';
   renderCommandesList();
 }
 
-document.getElementById('commandePretRecupBtn').addEventListener('click', ()=> markCommandePrete('recuperation'));
-document.getElementById('commandePretLivraisonBtn').addEventListener('click', ()=> markCommandePrete('livraison'));
+document.getElementById('commandePretBtn').addEventListener('click', markCommandePrete);
 
 loadCustomData();
 </script>
