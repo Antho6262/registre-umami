@@ -1154,16 +1154,17 @@
 
     <div id="cmdFormPanel">
       <div class="add-grid">
-        <div class="field"><label>Nom (entreprise / famille / groupe)</label><input type="text" id="cmd-client" placeholder="Ex. LTD Roxwood"></div>
-        <div class="field"><label>Contact (téléphone ou pseudo Discord)</label><input type="text" id="cmd-contact" placeholder="Ex. 555 123 456"></div>
+        <div class="field"><label>Nom (entreprise / famille / groupe)</label><input type="text" id="cmd-client" placeholder="Ex. Restaurant Umami"></div>
+        <div class="field"><label>Téléphone</label><input type="text" id="cmd-tel" placeholder="Ex. 555 123 456"></div>
         <div class="field">
           <label>Zone fiscale</label>
           <select id="cmd-zone">
+            <option value="Sud" selected>Sud</option>
             <option value="Nord">Nord</option>
-            <option value="Sud">Sud</option>
             <option value="Cayo">Cayo</option>
           </select>
         </div>
+        <div class="field wide"><label>Lien webhook Discord (optionnel, pour recevoir les notifications d'avancée de votre commande dans votre salon)</label><input type="text" id="cmd-contact" placeholder="Ex. https://discord.com/api/webhooks/..."></div>
       </div>
 
       <nav class="tabs" id="cmdCatTabs"></nav>
@@ -2542,7 +2543,7 @@ const DISCORD_ROLE_ID = "1181348873898311762";
 // Lien du site (celui de GitHub Pages), envoyé avec chaque notification de commande
 const SITE_URL = "https://antho6262.github.io/registre-umami/";
 // Webhook d'un salon dédié aux factures payées (optionnel). Laisse vide pour désactiver.
-const DISCORD_INVOICE_WEBHOOK_URL = "";
+const DISCORD_INVOICE_WEBHOOK_URL = "https://discord.com/api/webhooks/1547784640155099156/npVEbTDlacU8dD3LYNR9T3NUAeWTjz6csVknjenqp14WKDTU90_ayWn1pTxmRYY723QE";
 
 const ZONE_TAX_RATES = { Nord: 0.04, Sud: 0.05, Cayo: 0.03 };
 
@@ -2584,6 +2585,24 @@ async function sendDiscordMessage(content, pingRole){
 async function sendDiscordThreadMessage(order, content){
   if(!order || !order.discordThreadId) return;
   await discordPost({ content }, order.discordThreadId);
+}
+
+// Envoie une notification au client sur son propre webhook Discord, s'il en a fourni un
+async function notifyClientWebhook(order, content){
+  if(!order || !order.clientWebhook) return;
+  try{
+    await fetch(order.clientWebhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: '**Umami — Commande ' + order.ref + '**\n' + content })
+    });
+  }catch(e){ console.error('Erreur webhook client', e); }
+}
+
+// Notifie à la fois notre fil interne et le webhook du client (si fourni)
+async function notifyOrderUpdate(order, content){
+  await sendDiscordThreadMessage(order, content);
+  await notifyClientWebhook(order, content);
 }
 
 // Envoie la facture (image) dans le salon dédié aux factures payées
@@ -2737,7 +2756,8 @@ document.getElementById('cmd-zone').addEventListener('change', renderCmdSummary)
 
 document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
   const client = document.getElementById('cmd-client').value.trim();
-  const contact = document.getElementById('cmd-contact').value.trim();
+  const tel = document.getElementById('cmd-tel').value.trim();
+  const clientWebhook = document.getElementById('cmd-contact').value.trim();
   const zone = document.getElementById('cmd-zone').value;
   const errEl = document.getElementById('cmd-error');
   errEl.textContent = '';
@@ -2750,7 +2770,7 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
   const poids = lignes.reduce((s,l)=>s+l.qte, 0);
 
   const order = {
-    client, contact, zone, lignes,
+    client, tel, clientWebhook, zone, lignes,
     sousTotalHT, ttc, poids,
     ts: Date.now(),
     statut: 'en_attente'
@@ -2769,7 +2789,7 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
       '📥 **Nouvelle commande** de **' + client + '** (' + zone + ')\n' +
       lignes.map(l => '• ' + l.nom + ' x' + l.qte + ' — ' + formatMoneyPlain(l.prixTotal)).join('\n') +
       '\n**Total TTC : ' + formatMoneyPlain(ttc) + '**\nRéférence : `' + refKey + '`' +
-      (contact ? '\nContact : ' + contact : '') +
+      (tel ? '\nTéléphone : ' + tel : '') +
       (SITE_URL ? '\n🔗 ' + SITE_URL : '');
 
     const msg = await discordPost(
@@ -2891,7 +2911,7 @@ async function renderMyOrders(){
       const order = orders.find(o=>o.ref===ref);
       await db.ref('commandes/' + ref).update({ preuvePaiement: proof });
       order.preuvePaiement = proof;
-      await sendDiscordThreadMessage(order, '💳 Le client a soumis une preuve de paiement : ' + proof);
+      await notifyOrderUpdate(order, '💳 Le client a soumis une preuve de paiement : ' + proof);
       renderMyOrders();
     });
   });
@@ -2975,7 +2995,8 @@ let currentDetailOrder = null;
 function openCommandeDetail(order){
   currentDetailOrder = order;
   document.getElementById('commandeDetailContent').innerHTML = generateDevisHTML(order, (order.statut==='validee'||order.statut==='payee') ? 'FACTURE' : 'DEVIS') +
-    (order.contact ? '<p style="padding:0 24px 12px;">Contact : ' + escapeHtml(order.contact) + '</p>' : '');
+    (order.tel ? '<p style="padding:0 24px 4px;">Téléphone : ' + escapeHtml(order.tel) + '</p>' : '') +
+    (order.clientWebhook ? '<p style="padding:0 24px 12px;">Webhook client : configuré ✓</p>' : '');
   const isPending = order.statut === 'en_attente';
   const isValidee = order.statut === 'validee';
   document.getElementById('commandeAcceptBtn').style.display = isPending ? 'inline-block' : 'none';
@@ -2997,7 +3018,7 @@ document.getElementById('commandeAcceptBtn').addEventListener('click', async ()=
   await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'validee' });
   currentDetailOrder.statut = 'validee';
   logAction('Commande validée', currentDetailOrder.client + ' — ' + formatMoneyPlain(currentDetailOrder.ttc));
-  await sendDiscordThreadMessage(currentDetailOrder, '✅ Commande **validée** — ' + formatMoneyPlain(currentDetailOrder.ttc) + ' TTC. Merci de procéder au virement.');
+  await notifyOrderUpdate(currentDetailOrder, '✅ Commande **validée** — ' + formatMoneyPlain(currentDetailOrder.ttc) + ' TTC. Merci de procéder au virement.');
   document.getElementById('commandeDetailModal').style.display = 'none';
   renderCommandesList();
 });
@@ -3008,7 +3029,7 @@ document.getElementById('commandeRefuseBtn').addEventListener('click', async ()=
   await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'refusee', raisonRefus: raison });
   currentDetailOrder.statut = 'refusee';
   logAction('Commande refusée', currentDetailOrder.client + (raison ? ' — ' + raison : ''));
-  await sendDiscordThreadMessage(currentDetailOrder, '❌ Commande **refusée**' + (raison ? ' — ' + raison : ''));
+  await notifyOrderUpdate(currentDetailOrder, '❌ Commande **refusée**' + (raison ? ' — ' + raison : ''));
   document.getElementById('commandeDetailModal').style.display = 'none';
   renderCommandesList();
 });
@@ -3018,7 +3039,7 @@ document.getElementById('commandePaidBtn').addEventListener('click', async ()=>{
   await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'payee' });
   currentDetailOrder.statut = 'payee';
   logAction('Commande marquée payée', currentDetailOrder.client + ' — ' + formatMoneyPlain(currentDetailOrder.ttc));
-  await sendDiscordThreadMessage(currentDetailOrder, '💰 Commande marquée **payée** ✓ Merci !');
+  await notifyOrderUpdate(currentDetailOrder, '💰 Commande marquée **payée** ✓ Merci !');
   await sendInvoiceToFinanceChannel(currentDetailOrder);
   document.getElementById('commandeDetailModal').style.display = 'none';
   renderCommandesList();
