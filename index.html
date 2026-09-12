@@ -1122,6 +1122,18 @@
   <p>Chargement…</p>
 </div>
 
+<div class="modal-backdrop" id="readyPopupModal" style="display:none;z-index:1300;">
+  <section class="members-panel" style="max-width:520px;text-align:center;border-color:var(--gold);">
+    <div style="font-size:48px;margin-bottom:10px;">🍱</div>
+    <h2 style="color:var(--gold);">Commande prête !</h2>
+    <p id="readyPopupText" style="font-size:15px;margin:14px 0 6px;"></p>
+    <div id="readyPopupBox" style="text-align:left;"></div>
+    <div class="add-actions" style="justify-content:center;margin-top:16px;">
+      <button class="btn secondary" id="readyPopupClose" type="button">Fermer</button>
+    </div>
+  </section>
+</div>
+
 <div id="savingIndicator" class="saving-indicator"></div>
 <div id="undoToast"></div>
 
@@ -2921,6 +2933,7 @@ document.getElementById('chooseCommande').addEventListener('click', ()=>{
   renderCmdCatalog();
   renderCmdSummary();
   prefillClientInfo();
+  attachAllMyOrdersListeners();
 });
 
 function prefillClientInfo(){
@@ -3055,9 +3068,40 @@ function attachMyOrderListener(ref){
   myOrdersListenedRefs.add(ref);
   db.ref('commandes/' + ref).on('value', snap => {
     const o = snap.val();
-    if(o){ myOrdersCache[ref] = o; }
+    if(o){
+      const previous = myOrdersCache[ref];
+      myOrdersCache[ref] = o;
+      if(o.prete && !o.disponibilite && (!previous || !previous.prete)){
+        showReadyPopup(o);
+      }
+    }
     renderMyOrdersFromCache();
   });
+}
+
+function attachAllMyOrdersListeners(){
+  getMyOrderRefs().forEach(attachMyOrderListener);
+}
+
+let readyPopupShownFor = new Set();
+function showReadyPopup(order){
+  if(readyPopupShownFor.has(order.ref)) return;
+  readyPopupShownFor.add(order.ref);
+  const modal = document.getElementById('readyPopupModal');
+  const label = order.modeLivraison === 'livraison' ? 'être livrée' : 'être récupérée';
+  document.getElementById('readyPopupText').innerHTML =
+    'Ta commande <b>' + escapeHtml(order.ref) + '</b> est <b>prête</b> à ' + label + ' !<br>Précise ta disponibilité :';
+  const box = document.getElementById('readyPopupBox');
+  box.innerHTML = dispoBoxHTML(order);
+  wireDispoSubmit(box, () => order, () => { modal.style.display = 'none'; renderMyOrders(); });
+  modal.style.display = 'flex';
+  try{
+    if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
+      new Notification('Umami — Commande prête', { body: 'Ta commande ' + order.ref + ' est prête !' });
+    }else if(typeof Notification !== 'undefined' && Notification.permission !== 'denied'){
+      Notification.requestPermission();
+    }
+  }catch(e){}
 }
 
 function renderMyOrders(){
@@ -3256,6 +3300,10 @@ async function downloadDevisPDF(el, refName){
   pdf.addImage(imgData, 'PNG', 20, 20, imgWidth, imgHeight);
   pdf.save((refName || 'facture-umami') + '.pdf');
 }
+
+document.getElementById('readyPopupClose').addEventListener('click', ()=>{
+  document.getElementById('readyPopupModal').style.display = 'none';
+});
 
 document.getElementById('cmdTrackBtn').addEventListener('click', ()=>{
   document.getElementById('cmdFormPanel').style.display = 'none';
