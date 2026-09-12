@@ -1134,6 +1134,7 @@
       <button class="btn secondary" id="commandeRefuseBtn" type="button" style="border-color:var(--accent);color:var(--accent);">Refuser</button>
       <button class="btn secondary" id="commandePaidBtn" type="button" style="border-color:var(--ok);color:var(--ok);display:none;">Marquer payée</button>
       <button class="btn secondary" id="commandePretBtn" type="button" style="border-color:var(--gold);color:var(--gold);display:none;">Commande prête</button>
+      <button class="btn secondary" id="commandeArchiveBtn" type="button" style="border-color:var(--text-muted);color:var(--text-muted);display:none;">Archiver</button>
       <button class="btn" id="commandeAcceptBtn" type="button">Accepter</button>
     </div>
   </section>
@@ -1163,6 +1164,9 @@
       <button id="dirLogoutBtn">Déconnexion</button>
     </div>
 
+    <div class="toolbar">
+      <button class="btn secondary" id="toggleArchivedBtn">Voir les archives</button>
+    </div>
     <p class="result-count" id="commandesResultCount"></p>
     <div id="commandesList" class="hist-list"></div>
 
@@ -3290,16 +3294,21 @@ document.getElementById('cmdDownloadDevis').addEventListener('click', ()=>{
 
 /* ---- Gestion des commandes côté staff ---- */
 let commandesListenerAttached = false;
-function renderCommandesFromOrders(orders){
+let showArchivedOrders = false;
+let allCommandesCache = [];
+
+function renderCommandesFromOrders(allOrders){
+  allCommandesCache = allOrders;
+  const orders = allOrders.filter(o => showArchivedOrders ? !!o.archivee : !o.archivee);
   const host = document.getElementById('commandesList');
   const countEl = document.getElementById('commandesResultCount');
   if(orders.length === 0){
     if(countEl) countEl.textContent = '';
-    host.innerHTML = '<p class="hint">Aucune commande pour le moment.</p>';
+    host.innerHTML = '<p class="hint">' + (showArchivedOrders ? 'Aucune commande archivée.' : 'Aucune commande active pour le moment.') + '</p>';
     return;
   }
   const STATUT_LABEL = { en_attente:'⏳ En attente', validee:'✅ Validée', payee:'💰 Payée', refusee:'❌ Refusée' };
-  if(countEl) countEl.textContent = orders.length + ' commande' + (orders.length>1?'s':'') + ' au total';
+  if(countEl) countEl.textContent = orders.length + ' commande' + (orders.length>1?'s':'') + (showArchivedOrders ? ' archivée' + (orders.length>1?'s':'') : ' active' + (orders.length>1?'s':''));
   host.innerHTML = orders.map(o =>
     '<div class="hist-row" style="grid-template-columns:130px 1fr 100px 120px;cursor:pointer;" data-ref="' + o.ref + '">' +
     '<span class="hist-date">' + new Date(o.ts).toLocaleDateString('fr-FR') + '</span>' +
@@ -3309,9 +3318,15 @@ function renderCommandesFromOrders(orders){
     '</div>'
   ).join('');
   host.querySelectorAll('[data-ref]').forEach(row=>{
-    row.addEventListener('click', ()=> openCommandeDetail(orders.find(o=>o.ref===row.getAttribute('data-ref'))));
+    row.addEventListener('click', ()=> openCommandeDetail(allOrders.find(o=>o.ref===row.getAttribute('data-ref'))));
   });
 }
+
+document.getElementById('toggleArchivedBtn').addEventListener('click', ()=>{
+  showArchivedOrders = !showArchivedOrders;
+  document.getElementById('toggleArchivedBtn').textContent = showArchivedOrders ? '← Voir les commandes actives' : 'Voir les archives';
+  renderCommandesFromOrders(allCommandesCache);
+});
 
 function renderCommandesList(){
   const host = document.getElementById('commandesList');
@@ -3340,14 +3355,17 @@ function openCommandeDetail(order){
     (order.clientWebhook ? '<p style="padding:0 24px 4px;">Webhook client : configuré ✓</p>' : '') +
     '<p style="padding:0 24px 4px;">Souhaite : ' + (order.modeLivraison === 'livraison' ? '🚚 Être livré' : '🍱 Récupérer sur place') + '</p>' +
     (order.prete ? '<p style="padding:0 24px 4px;color:var(--gold);font-weight:bold;">' + (order.modeLivraison === 'livraison' ? '🚚 Commande marquée prête (livraison)' : '🍱 Commande marquée prête (récupération)') + '</p>' : '') +
-    (order.disponibilite ? '<p style="padding:0 24px 12px;color:var(--gold);">📅 Disponibilité du client : ' + escapeHtml(order.disponibilite) + '</p>' : '');
+    (order.disponibilite ? '<p style="padding:0 24px 12px;color:var(--gold);">📅 Disponibilité du client : ' + escapeHtml(order.disponibilite) + '</p>' : '') +
+    (order.archivee ? '<p style="padding:0 24px 12px;color:var(--text-muted);font-weight:bold;">📦 Commande archivée</p>' : '');
   const isPending = order.statut === 'en_attente';
   const isValidee = order.statut === 'validee';
   const canMarkReady = (order.statut === 'validee' || order.statut === 'payee') && !order.prete;
+  const canArchive = (order.statut === 'payee' || order.statut === 'refusee') && !order.archivee;
   document.getElementById('commandeAcceptBtn').style.display = isPending ? 'inline-block' : 'none';
   document.getElementById('commandeRefuseBtn').style.display = isPending ? 'inline-block' : 'none';
   document.getElementById('commandePaidBtn').style.display = isValidee ? 'inline-block' : 'none';
   document.getElementById('commandePretBtn').style.display = canMarkReady ? 'inline-block' : 'none';
+  document.getElementById('commandeArchiveBtn').style.display = canArchive ? 'inline-block' : 'none';
   document.getElementById('commandeDetailModal').style.display = 'flex';
 }
 
@@ -3406,6 +3424,14 @@ async function markCommandePrete(){
 }
 
 document.getElementById('commandePretBtn').addEventListener('click', markCommandePrete);
+
+document.getElementById('commandeArchiveBtn').addEventListener('click', async ()=>{
+  if(!currentDetailOrder || !db) return;
+  await db.ref('commandes/' + currentDetailOrder.ref).update({ archivee: true });
+  currentDetailOrder.archivee = true;
+  logAction('Commande archivée', currentDetailOrder.client);
+  document.getElementById('commandeDetailModal').style.display = 'none';
+});
 
 loadCustomData();
 </script>
