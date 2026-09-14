@@ -1225,7 +1225,16 @@
 
     <div id="cmdFormPanel">
       <div class="add-grid">
-        <div class="field"><label>Nom (entreprise / famille / groupe)</label><input type="text" id="cmd-client" placeholder="Ex. Restaurant Umami"></div>
+        <div class="field wide">
+          <label>Entreprise / famille / groupe</label>
+          <select id="cmd-client-select">
+            <option value="">— Nouvelle entreprise / famille / groupe —</option>
+          </select>
+        </div>
+        <div class="field" id="cmd-client-field">
+          <label>Nom (si non listé ci-dessus)</label>
+          <input type="text" id="cmd-client" placeholder="Ex. Restaurant Umami">
+        </div>
         <div class="field"><label>Téléphone</label><input type="text" id="cmd-tel" placeholder="Ex. 555 123 456"></div>
         <div class="field">
           <label>Zone fiscale</label>
@@ -1242,7 +1251,7 @@
             <option value="livraison">Je souhaite être livré</option>
           </select>
         </div>
-        <div class="field wide"><label>Lien webhook Discord (uniquement si Umami n'en a pas déjà configuré un pour votre entreprise)</label><input type="text" id="cmd-contact" placeholder="Ex. https://discord.com/api/webhooks/..."></div>
+        <div class="field wide" id="cmd-contact-field"><label>Lien webhook Discord (uniquement si Umami n'en a pas déjà configuré un pour votre entreprise)</label><input type="text" id="cmd-contact" placeholder="Ex. https://discord.com/api/webhooks/..."></div>
       </div>
 
       <nav class="tabs" id="cmdCatTabs"></nav>
@@ -3020,15 +3029,31 @@ function generateDevisHTML(order, docType){
     '</div>';
 }
 
-document.getElementById('chooseCommande').addEventListener('click', ()=>{
+document.getElementById('chooseCommande').addEventListener('click', async ()=>{
   document.getElementById('landingScreen').style.display = 'none';
   document.getElementById('commandeMain').style.display = 'block';
   cmdActiveCat = cmdCategories()[0] || null;
   renderCmdCatTabs();
   renderCmdCatalog();
   renderCmdSummary();
-  prefillClientInfo();
   attachAllMyOrdersListeners();
+  if(!entreprisesWebhooksLoaded) await loadEntreprisesWebhooks();
+  populateClientSelect();
+  prefillClientInfo();
+});
+
+function populateClientSelect(){
+  const sel = document.getElementById('cmd-client-select');
+  const names = Object.values(entreprisesWebhooks).map(e=>e.nom).sort((a,b)=>a.localeCompare(b, 'fr'));
+  sel.innerHTML = '<option value="">— Nouvelle entreprise / famille / groupe —</option>' +
+    names.map(n => '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>').join('');
+}
+
+document.getElementById('cmd-client-select').addEventListener('change', (e)=>{
+  const known = !!e.target.value;
+  document.getElementById('cmd-client').value = e.target.value;
+  document.getElementById('cmd-client-field').style.display = known ? 'none' : 'block';
+  document.getElementById('cmd-contact-field').style.display = known ? 'none' : 'block';
 });
 
 function prefillClientInfo(){
@@ -3037,6 +3062,14 @@ function prefillClientInfo(){
     if(saved.client) document.getElementById('cmd-client').value = saved.client;
     if(saved.tel) document.getElementById('cmd-tel').value = saved.tel;
     if(saved.clientWebhook) document.getElementById('cmd-contact').value = saved.clientWebhook;
+    if(saved.client && findEntrepriseWebhook(saved.client)){
+      const sel = document.getElementById('cmd-client-select');
+      sel.value = saved.client;
+      if(sel.value === saved.client){
+        document.getElementById('cmd-client-field').style.display = 'none';
+        document.getElementById('cmd-contact-field').style.display = 'none';
+      }
+    }
   }catch(e){}
 }
 
