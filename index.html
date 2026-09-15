@@ -3135,6 +3135,7 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
     await db.ref('commandes/' + refKey).set(order);
     rememberMyOrder(refKey);
     try{ localStorage.setItem('umami_client_info', JSON.stringify({ client, tel, clientWebhook })); }catch(e){}
+    await notifyClientWebhook(order, "📥 Votre commande a bien été envoyée et sera traitée d'ici peu. Référence : " + refKey);
     hideSaving();
 
     document.getElementById('cmdFormPanel').style.display = 'none';
