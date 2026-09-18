@@ -1122,11 +1122,13 @@
     <h2>Webhooks entreprises</h2>
     <p class="hint">Associe le nom exact d'une entreprise (celui qu'elle utilisera dans "Nom" à la commande) à un webhook Discord de son salon. Ses notifications de commande y seront envoyées automatiquement, sans qu'elle ait à coller le lien elle-même.</p>
     <div id="entreprisesWebhooksList" class="hist-list" style="margin-top:14px;"></div>
-    <div class="add-member-grid" style="margin-top:16px;grid-template-columns:1fr 1fr auto;">
+    <div class="add-member-grid" style="margin-top:16px;">
       <div class="field"><label>Nom de l'entreprise</label><input type="text" id="ew-new-name" placeholder="Ex. LTD Roxwood"></div>
       <div class="field"><label>URL du webhook Discord</label><input type="text" id="ew-new-url" placeholder="https://discord.com/api/webhooks/..."></div>
+      <div class="field wide"><label>Mention à pinguer (optionnel)</label><input type="text" id="ew-new-mention" placeholder="Ex. &lt;@123456789012345678&gt; ou &lt;@&amp;123456789012345678&gt;"></div>
       <button class="btn secondary" id="ew-add" type="button">Ajouter</button>
     </div>
+    <p class="hint">Pour obtenir la mention exacte : active le mode développeur Discord (Paramètres → Avancés), puis clic droit sur la personne ou le rôle → "Copier l'ID" et colle-le sous la forme <code>&lt;@ID&gt;</code> (personne) ou <code>&lt;@&amp;ID&gt;</code> (rôle).</p>
     <p class="auth-error" id="ew-error"></p>
     <div class="add-actions"><button class="btn secondary" id="entreprisesWebhooksPanelClose" type="button">Fermer</button></div>
   </section>
@@ -1223,7 +1225,21 @@
       <button id="cmdTrackBtn">Suivre ma commande</button>
     </div>
 
-    <div id="cmdFormPanel">
+    <div id="cmdSpaceChoice" style="margin:40px 0;text-align:center;">
+      <h2 style="font-family:'Times New Roman',Georgia,serif;font-style:italic;font-weight:400;color:#f4ece0;margin-bottom:24px;">Quel type de commande ?</h2>
+      <div class="landing-choices" style="justify-content:center;">
+        <button class="landing-card" id="chooseEspaceFamille">
+          <span class="lc-title">Espace Famille</span>
+          <span class="lc-desc">Nos menus, aux prix entreprise</span>
+        </button>
+        <button class="landing-card" id="chooseEspaceEntreprise">
+          <span class="lc-title">Espace Entreprise</span>
+          <span class="lc-desc">Catalogue complet pour votre entreprise</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="cmdFormPanel" style="display:none;">
       <div class="add-grid">
         <div class="field wide">
           <label>Entreprise / famille / groupe</label>
@@ -1252,6 +1268,7 @@
           </select>
         </div>
         <div class="field wide" id="cmd-contact-field"><label>Lien webhook Discord (uniquement si Umami n'en a pas déjà configuré un pour votre entreprise)</label><input type="text" id="cmd-contact" placeholder="Ex. https://discord.com/api/webhooks/..."></div>
+        <div class="field wide" id="cmd-mention-field"><label>Mention à pinguer sur ce webhook (optionnel — ex: &lt;@ID&gt; ou &lt;@&amp;ID&gt;)</label><input type="text" id="cmd-mention" placeholder="Ex. <@123456789012345678>"></div>
       </div>
 
       <nav class="tabs" id="cmdCatTabs"></nav>
@@ -1621,6 +1638,11 @@ function findEntrepriseWebhook(clientName){
   return entry ? entry.webhook : null;
 }
 
+function findEntrepriseMention(clientName){
+  const entry = entreprisesWebhooks[normalizeEntrepriseName(clientName)];
+  return entry ? (entry.mention || '') : '';
+}
+
 function renderEntreprisesWebhooksPanel(){
   const host = document.getElementById('entreprisesWebhooksList');
   const entries = Object.values(entreprisesWebhooks).sort((a,b)=>a.nom.localeCompare(b.nom, 'fr'));
@@ -1630,7 +1652,7 @@ function renderEntreprisesWebhooksPanel(){
   }
   host.innerHTML = entries.map(e =>
     '<div class="hist-row" style="grid-template-columns:1fr 2fr auto;">' +
-    '<span class="hist-user">' + escapeHtml(e.nom) + '</span>' +
+    '<span class="hist-user">' + escapeHtml(e.nom) + (e.mention ? '<br><span class="hint">' + escapeHtml(e.mention) + '</span>' : '') + '</span>' +
     '<span class="hist-details" style="word-break:break-all;">' + escapeHtml(e.webhook) + '</span>' +
     '<button class="btn secondary ew-delete" data-key="' + normalizeEntrepriseName(e.nom) + '" style="border-color:var(--accent);color:var(--accent);">Supprimer</button>' +
     '</div>'
@@ -2315,15 +2337,17 @@ document.getElementById('entreprisesWebhooksPanelClose').addEventListener('click
 document.getElementById('ew-add').addEventListener('click', async ()=>{
   const nom = document.getElementById('ew-new-name').value.trim();
   const webhook = document.getElementById('ew-new-url').value.trim();
+  const mention = document.getElementById('ew-new-mention').value.trim();
   const errEl = document.getElementById('ew-error');
   errEl.textContent = '';
   if(!nom || !webhook){ errEl.textContent = 'Nom et URL du webhook requis.'; return; }
   if(!webhook.startsWith('https://discord.com/api/webhooks/')){ errEl.textContent = 'URL de webhook Discord invalide.'; return; }
-  entreprisesWebhooks[normalizeEntrepriseName(nom)] = { nom, webhook };
+  entreprisesWebhooks[normalizeEntrepriseName(nom)] = { nom, webhook, mention };
   await persistEntreprisesWebhooks();
   logAction('Webhook entreprise configuré', nom);
   document.getElementById('ew-new-name').value = '';
   document.getElementById('ew-new-url').value = '';
+  document.getElementById('ew-new-mention').value = '';
   renderEntreprisesWebhooksPanel();
 });
 
@@ -2882,10 +2906,11 @@ async function sendDiscordThreadMessage(order, content){
 async function notifyClientWebhook(order, content){
   if(!order || !order.clientWebhook) return;
   try{
+    const mentionPrefix = order.clientMention ? (order.clientMention + ' ') : '';
     await fetch(order.clientWebhook, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: '**Umami — Commande ' + order.ref + '**\n' + content })
+      body: JSON.stringify({ content: mentionPrefix + '**Umami — Commande ' + order.ref + '**\n' + content })
     });
   }catch(e){ console.error('Erreur webhook client', e); }
 }
@@ -2918,9 +2943,12 @@ async function sendInvoiceToFinanceChannel(order){
   }catch(e){ console.error('Erreur envoi facture salon dédié', e); }
 }
 
+let cmdSpaceType = 'entreprise'; // 'famille' | 'entreprise'
+
 function cmdCategories(){
   const cats = [];
   ORDER_CATALOG.forEach(it=>{ if(!cats.includes(it.cat)) cats.push(it.cat); });
+  if(cmdSpaceType === 'famille') return cats.filter(c => c === 'Menus');
   return cats;
 }
 
@@ -3033,15 +3061,27 @@ function generateDevisHTML(order, docType){
 document.getElementById('chooseCommande').addEventListener('click', async ()=>{
   document.getElementById('landingScreen').style.display = 'none';
   document.getElementById('commandeMain').style.display = 'block';
-  cmdActiveCat = cmdCategories()[0] || null;
-  renderCmdCatTabs();
-  renderCmdCatalog();
-  renderCmdSummary();
+  document.getElementById('cmdSpaceChoice').style.display = 'block';
+  document.getElementById('cmdFormPanel').style.display = 'none';
+  document.getElementById('cmdDevisPanel').style.display = 'none';
+  document.getElementById('cmdTrackPanel').style.display = 'none';
   attachAllMyOrdersListeners();
   if(!entreprisesWebhooksLoaded) await loadEntreprisesWebhooks();
   populateClientSelect();
   prefillClientInfo();
 });
+
+function enterCmdSpace(spaceType){
+  cmdSpaceType = spaceType;
+  document.getElementById('cmdSpaceChoice').style.display = 'none';
+  document.getElementById('cmdFormPanel').style.display = 'block';
+  cmdActiveCat = cmdCategories()[0] || null;
+  renderCmdCatTabs();
+  renderCmdCatalog();
+  renderCmdSummary();
+}
+document.getElementById('chooseEspaceFamille').addEventListener('click', ()=> enterCmdSpace('famille'));
+document.getElementById('chooseEspaceEntreprise').addEventListener('click', ()=> enterCmdSpace('entreprise'));
 
 function populateClientSelect(){
   const sel = document.getElementById('cmd-client-select');
@@ -3055,6 +3095,7 @@ document.getElementById('cmd-client-select').addEventListener('change', (e)=>{
   document.getElementById('cmd-client').value = e.target.value;
   document.getElementById('cmd-client-field').style.display = known ? 'none' : 'block';
   document.getElementById('cmd-contact-field').style.display = known ? 'none' : 'block';
+  document.getElementById('cmd-mention-field').style.display = known ? 'none' : 'block';
 });
 
 function prefillClientInfo(){
@@ -3085,6 +3126,7 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
   const client = document.getElementById('cmd-client').value.trim();
   const tel = document.getElementById('cmd-tel').value.trim();
   const manualWebhook = document.getElementById('cmd-contact').value.trim();
+  const manualMention = document.getElementById('cmd-mention').value.trim();
   const zone = document.getElementById('cmd-zone').value;
   const modeLivraison = document.getElementById('cmd-livraison').value;
   const errEl = document.getElementById('cmd-error');
@@ -3095,13 +3137,14 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
 
   if(!entreprisesWebhooksLoaded) await loadEntreprisesWebhooks();
   const clientWebhook = findEntrepriseWebhook(client) || manualWebhook;
+  const clientMention = findEntrepriseMention(client) || manualMention;
 
   const sousTotalHT = lignes.reduce((s,l)=>s+l.prixTotal, 0);
   const ttc = sousTotalHT * (1 + (ZONE_TAX_RATES[zone] || 0));
   const poids = lignes.reduce((s,l)=>s+l.qte, 0);
 
   const order = {
-    client, tel, clientWebhook, zone, modeLivraison, lignes,
+    client, tel, clientWebhook, clientMention, zone, modeLivraison, espace: cmdSpaceType, lignes,
     sousTotalHT, ttc, poids,
     ts: Date.now(),
     statut: 'en_attente'
@@ -3440,6 +3483,7 @@ document.getElementById('readyPopupClose').addEventListener('click', ()=>{
 });
 
 document.getElementById('cmdTrackBtn').addEventListener('click', ()=>{
+  document.getElementById('cmdSpaceChoice').style.display = 'none';
   document.getElementById('cmdFormPanel').style.display = 'none';
   document.getElementById('cmdDevisPanel').style.display = 'none';
   document.getElementById('cmdTrackPanel').style.display = 'block';
@@ -3447,9 +3491,13 @@ document.getElementById('cmdTrackBtn').addEventListener('click', ()=>{
 });
 
 document.getElementById('cmdNewOrderBtn').addEventListener('click', ()=>{
+  document.getElementById('cmdSpaceChoice').style.display = 'none';
   document.getElementById('cmdTrackPanel').style.display = 'none';
   document.getElementById('cmdDevisPanel').style.display = 'none';
   document.getElementById('cmdFormPanel').style.display = 'block';
+  renderCmdCatTabs();
+  renderCmdCatalog();
+  renderCmdSummary();
 });
 
 document.getElementById('cmdTrackSearchBtn').addEventListener('click', async ()=>{
