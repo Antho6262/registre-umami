@@ -1119,11 +1119,11 @@
 
 <div class="modal-backdrop" id="entreprisesWebhooksPanel" style="display:none;">
   <section class="members-panel" style="max-width:720px;">
-    <h2>Webhooks entreprises</h2>
-    <p class="hint">Associe le nom exact d'une entreprise (celui qu'elle utilisera dans "Nom" à la commande) à un webhook Discord de son salon. Ses notifications de commande y seront envoyées automatiquement, sans qu'elle ait à coller le lien elle-même.</p>
+    <h2 id="ew-panel-title">Webhooks entreprises</h2>
+    <p class="hint" id="ew-panel-desc">Associe le nom exact d'une entreprise (celui qu'elle utilisera dans "Nom" à la commande) à un webhook Discord de son salon. Ses notifications de commande y seront envoyées automatiquement, sans qu'elle ait à coller le lien elle-même.</p>
     <div id="entreprisesWebhooksList" class="hist-list" style="margin-top:14px;"></div>
     <div class="add-member-grid" style="margin-top:16px;">
-      <div class="field"><label>Nom de l'entreprise</label><input type="text" id="ew-new-name" placeholder="Ex. LTD Roxwood"></div>
+      <div class="field"><label id="ew-panel-namelabel">Nom de l'entreprise</label><input type="text" id="ew-new-name" placeholder="Ex. LTD Roxwood"></div>
       <div class="field"><label>URL du webhook Discord</label><input type="text" id="ew-new-url" placeholder="https://discord.com/api/webhooks/..."></div>
       <div class="field wide"><label>Mention à pinguer (optionnel)</label><input type="text" id="ew-new-mention" placeholder="Ex. &lt;@123456789012345678&gt; ou &lt;@&amp;123456789012345678&gt;"></div>
       <button class="btn secondary" id="ew-add" type="button">Ajouter</button>
@@ -1189,6 +1189,7 @@
       <button id="dirChangePwBtn">Changer mon mot de passe</button>
       <button id="dirManageMembersBtn" style="display:none;">Gérer les membres</button>
       <button id="dirWebhooksBtn">Webhooks entreprises</button>
+      <button id="dirWebhooksFamillesBtn">Webhooks familles</button>
       <button class="themeToggle">Thème clair/sombre</button>
       <button id="dirBackBtn">← Accueil</button>
       <button id="dirLogoutBtn">Déconnexion</button>
@@ -1230,7 +1231,7 @@
       <div class="landing-choices" style="justify-content:center;">
         <button class="landing-card" id="chooseEspaceFamille">
           <span class="lc-title">Espace Famille</span>
-          <span class="lc-desc">Nos menus, aux prix entreprise</span>
+          <span class="lc-desc">Les menus pour toute la famille</span>
         </button>
         <button class="landing-card" id="chooseEspaceEntreprise">
           <span class="lc-title">Espace Entreprise</span>
@@ -1609,45 +1610,51 @@ function hideAuthScreen(){
 let invItems = [];
 let invSuppliers = {}; // { "Nom du fournisseur": { vivant: true/false } }
 
-let entreprisesWebhooks = {}; // { "nom normalisé": { nom: "Nom affiché", webhook: "https://..." } }
-let entreprisesWebhooksLoaded = false;
+let clientRegistries = {
+  entreprise: { data: {}, loaded: false, path: 'entreprises_webhooks' },
+  famille:    { data: {}, loaded: false, path: 'familles_webhooks' }
+};
 
 function normalizeEntrepriseName(n){
   return (n || '').trim().toLowerCase();
 }
 
-async function loadEntreprisesWebhooks(){
+async function loadClientRegistry(scope){
   if(!db) return;
+  const reg = clientRegistries[scope];
   try{
-    const snap = await db.ref('entreprises_webhooks').once('value');
-    entreprisesWebhooks = snap.val() || {};
-    entreprisesWebhooksLoaded = true;
-  }catch(e){ entreprisesWebhooks = {}; }
+    const snap = await db.ref(reg.path).once('value');
+    reg.data = snap.val() || {};
+    reg.loaded = true;
+  }catch(e){ reg.data = {}; }
 }
 
-async function persistEntreprisesWebhooks(){
+async function persistClientRegistry(scope){
   if(!db) return;
+  const reg = clientRegistries[scope];
   showSaving();
-  try{ await db.ref('entreprises_webhooks').set(entreprisesWebhooks); }
-  catch(e){ console.error('Erreur sauvegarde webhooks entreprises', e); }
+  try{ await db.ref(reg.path).set(reg.data); }
+  catch(e){ console.error('Erreur sauvegarde webhooks ' + scope, e); }
   finally{ hideSaving(); }
 }
 
-function findEntrepriseWebhook(clientName){
-  const entry = entreprisesWebhooks[normalizeEntrepriseName(clientName)];
+function findClientWebhook(scope, clientName){
+  const entry = clientRegistries[scope].data[normalizeEntrepriseName(clientName)];
   return entry ? entry.webhook : null;
 }
 
-function findEntrepriseMention(clientName){
-  const entry = entreprisesWebhooks[normalizeEntrepriseName(clientName)];
+function findClientMention(scope, clientName){
+  const entry = clientRegistries[scope].data[normalizeEntrepriseName(clientName)];
   return entry ? (entry.mention || '') : '';
 }
 
+let currentWebhookScope = 'entreprise';
+
 function renderEntreprisesWebhooksPanel(){
   const host = document.getElementById('entreprisesWebhooksList');
-  const entries = Object.values(entreprisesWebhooks).sort((a,b)=>a.nom.localeCompare(b.nom, 'fr'));
+  const entries = Object.values(clientRegistries[currentWebhookScope].data).sort((a,b)=>a.nom.localeCompare(b.nom, 'fr'));
   if(entries.length === 0){
-    host.innerHTML = '<p class="hint">Aucune entreprise configurée pour le moment.</p>';
+    host.innerHTML = '<p class="hint">' + (currentWebhookScope === 'famille' ? 'Aucune famille configurée pour le moment.' : 'Aucune entreprise configurée pour le moment.') + '</p>';
     return;
   }
   host.innerHTML = entries.map(e =>
@@ -1660,10 +1667,11 @@ function renderEntreprisesWebhooksPanel(){
   host.querySelectorAll('.ew-delete').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const key = btn.getAttribute('data-key');
-      const nom = entreprisesWebhooks[key] ? entreprisesWebhooks[key].nom : key;
-      delete entreprisesWebhooks[key];
-      await persistEntreprisesWebhooks();
-      logAction('Webhook entreprise supprimé', nom);
+      const reg = clientRegistries[currentWebhookScope];
+      const nom = reg.data[key] ? reg.data[key].nom : key;
+      delete reg.data[key];
+      await persistClientRegistry(currentWebhookScope);
+      logAction('Webhook ' + currentWebhookScope + ' supprimé', nom);
       renderEntreprisesWebhooksPanel();
     });
   });
@@ -2326,11 +2334,19 @@ document.getElementById('fourn-add').addEventListener('click', async ()=>{
   renderFournisseursPanel();
 });
 
-document.getElementById('dirWebhooksBtn').addEventListener('click', async ()=>{
-  if(!entreprisesWebhooksLoaded) await loadEntreprisesWebhooks();
+async function openWebhooksPanel(scope){
+  currentWebhookScope = scope;
+  if(!clientRegistries[scope].loaded) await loadClientRegistry(scope);
+  document.getElementById('ew-panel-title').textContent = scope === 'famille' ? 'Webhooks familles' : 'Webhooks entreprises';
+  document.getElementById('ew-panel-namelabel').textContent = scope === 'famille' ? 'Nom de la famille' : "Nom de l'entreprise";
+  document.getElementById('ew-panel-desc').textContent = scope === 'famille'
+    ? "Associe le nom exact d'une famille (celui qu'elle utilisera dans \"Nom\" à la commande) à un webhook Discord de son salon."
+    : "Associe le nom exact d'une entreprise (celui qu'elle utilisera dans \"Nom\" à la commande) à un webhook Discord de son salon. Ses notifications de commande y seront envoyées automatiquement, sans qu'elle ait à coller le lien elle-même.";
   document.getElementById('entreprisesWebhooksPanel').style.display = 'flex';
   renderEntreprisesWebhooksPanel();
-});
+}
+document.getElementById('dirWebhooksBtn').addEventListener('click', ()=> openWebhooksPanel('entreprise'));
+document.getElementById('dirWebhooksFamillesBtn').addEventListener('click', ()=> openWebhooksPanel('famille'));
 document.getElementById('entreprisesWebhooksPanelClose').addEventListener('click', ()=>{
   document.getElementById('entreprisesWebhooksPanel').style.display = 'none';
 });
@@ -2342,9 +2358,9 @@ document.getElementById('ew-add').addEventListener('click', async ()=>{
   errEl.textContent = '';
   if(!nom || !webhook){ errEl.textContent = 'Nom et URL du webhook requis.'; return; }
   if(!webhook.startsWith('https://discord.com/api/webhooks/')){ errEl.textContent = 'URL de webhook Discord invalide.'; return; }
-  entreprisesWebhooks[normalizeEntrepriseName(nom)] = { nom, webhook, mention };
-  await persistEntreprisesWebhooks();
-  logAction('Webhook entreprise configuré', nom);
+  clientRegistries[currentWebhookScope].data[normalizeEntrepriseName(nom)] = { nom, webhook, mention };
+  await persistClientRegistry(currentWebhookScope);
+  logAction('Webhook ' + currentWebhookScope + ' configuré', nom);
   document.getElementById('ew-new-name').value = '';
   document.getElementById('ew-new-url').value = '';
   document.getElementById('ew-new-mention').value = '';
@@ -3066,9 +3082,8 @@ document.getElementById('chooseCommande').addEventListener('click', async ()=>{
   document.getElementById('cmdDevisPanel').style.display = 'none';
   document.getElementById('cmdTrackPanel').style.display = 'none';
   attachAllMyOrdersListeners();
-  if(!entreprisesWebhooksLoaded) await loadEntreprisesWebhooks();
-  populateClientSelect();
-  prefillClientInfo();
+  if(!clientRegistries.entreprise.loaded) await loadClientRegistry('entreprise');
+  if(!clientRegistries.famille.loaded) await loadClientRegistry('famille');
 });
 
 function enterCmdSpace(spaceType){
@@ -3079,14 +3094,16 @@ function enterCmdSpace(spaceType){
   renderCmdCatTabs();
   renderCmdCatalog();
   renderCmdSummary();
+  populateClientSelect();
+  prefillClientInfo();
 }
 document.getElementById('chooseEspaceFamille').addEventListener('click', ()=> enterCmdSpace('famille'));
 document.getElementById('chooseEspaceEntreprise').addEventListener('click', ()=> enterCmdSpace('entreprise'));
 
 function populateClientSelect(){
   const sel = document.getElementById('cmd-client-select');
-  const names = Object.values(entreprisesWebhooks).map(e=>e.nom).sort((a,b)=>a.localeCompare(b, 'fr'));
-  sel.innerHTML = '<option value="">— Nouvelle entreprise / famille / groupe —</option>' +
+  const names = Object.values(clientRegistries[cmdSpaceType].data).map(e=>e.nom).sort((a,b)=>a.localeCompare(b, 'fr'));
+  sel.innerHTML = '<option value="">— Nouvelle ' + (cmdSpaceType === 'famille' ? 'famille' : 'entreprise') + ' / groupe —</option>' +
     names.map(n => '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>').join('');
 }
 
@@ -3104,7 +3121,7 @@ function prefillClientInfo(){
     if(saved.client) document.getElementById('cmd-client').value = saved.client;
     if(saved.tel) document.getElementById('cmd-tel').value = saved.tel;
     if(saved.clientWebhook) document.getElementById('cmd-contact').value = saved.clientWebhook;
-    if(saved.client && findEntrepriseWebhook(saved.client)){
+    if(saved.client && findClientWebhook(cmdSpaceType, saved.client)){
       const sel = document.getElementById('cmd-client-select');
       sel.value = saved.client;
       if(sel.value === saved.client){
@@ -3135,9 +3152,9 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
   if(!client){ errEl.textContent = 'Le nom (entreprise/famille/groupe) est requis.'; return; }
   if(lignes.length === 0){ errEl.textContent = 'Sélectionne au moins un article.'; return; }
 
-  if(!entreprisesWebhooksLoaded) await loadEntreprisesWebhooks();
-  const clientWebhook = findEntrepriseWebhook(client) || manualWebhook;
-  const clientMention = findEntrepriseMention(client) || manualMention;
+  if(!clientRegistries[cmdSpaceType].loaded) await loadClientRegistry(cmdSpaceType);
+  const clientWebhook = findClientWebhook(cmdSpaceType, client) || manualWebhook;
+  const clientMention = findClientMention(cmdSpaceType, client) || manualMention;
 
   const sousTotalHT = lignes.reduce((s,l)=>s+l.prixTotal, 0);
   const ttc = sousTotalHT * (1 + (ZONE_TAX_RATES[zone] || 0));
