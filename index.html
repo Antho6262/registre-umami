@@ -1122,13 +1122,16 @@
     <h2 id="ew-panel-title">Webhooks entreprises</h2>
     <p class="hint" id="ew-panel-desc">Associe le nom exact d'une entreprise (celui qu'elle utilisera dans "Nom" à la commande) à un webhook Discord de son salon. Ses notifications de commande y seront envoyées automatiquement, sans qu'elle ait à coller le lien elle-même.</p>
     <div id="entreprisesWebhooksList" class="hist-list" style="margin-top:14px;"></div>
+    <div class="add-actions" style="justify-content:flex-start;margin-top:10px;">
+      <button class="btn secondary" id="ew-fix-mentions" type="button" style="border-color:var(--gold);color:var(--gold);">Corriger les mentions (ajouter &amp; pour les rôles)</button>
+    </div>
     <div class="add-member-grid" style="margin-top:16px;">
       <div class="field"><label id="ew-panel-namelabel">Nom de l'entreprise</label><input type="text" id="ew-new-name" placeholder="Ex. LTD Roxwood"></div>
       <div class="field"><label>URL du webhook Discord</label><input type="text" id="ew-new-url" placeholder="https://discord.com/api/webhooks/..."></div>
-      <div class="field wide"><label>Mention à pinguer (optionnel)</label><input type="text" id="ew-new-mention" placeholder="Ex. &lt;@123456789012345678&gt; ou &lt;@&amp;123456789012345678&gt;"></div>
+      <div class="field wide"><label>Mention à pinguer (optionnel)</label><input type="text" id="ew-new-mention" placeholder="Ex. &lt;@123456789012345678&gt; (personne) ou &lt;@&amp;123456789012345678&gt; (rôle)"></div>
       <button class="btn secondary" id="ew-add" type="button">Ajouter</button>
     </div>
-    <p class="hint">Pour obtenir la mention exacte : active le mode développeur Discord (Paramètres → Avancés), puis clic droit sur la personne ou le rôle → "Copier l'ID" et colle-le sous la forme <code>&lt;@ID&gt;</code> (personne) ou <code>&lt;@&amp;ID&gt;</code> (rôle).</p>
+    <p class="hint">Pour un rôle, le format doit être <code>&lt;@&amp;ID&gt;</code> (avec le "&amp;") — pour une personne, <code>&lt;@ID&gt;</code> (sans). Mode développeur Discord (Paramètres → Avancés) puis clic droit → "Copier l'ID".</p>
     <p class="auth-error" id="ew-error"></p>
     <div class="add-actions"><button class="btn secondary" id="entreprisesWebhooksPanelClose" type="button">Fermer</button></div>
   </section>
@@ -1269,7 +1272,7 @@
           </select>
         </div>
         <div class="field wide" id="cmd-contact-field"><label>Lien webhook Discord (uniquement si Umami n'en a pas déjà configuré un pour votre entreprise)</label><input type="text" id="cmd-contact" placeholder="Ex. https://discord.com/api/webhooks/..."></div>
-        <div class="field wide" id="cmd-mention-field"><label>Mention à pinguer sur ce webhook (optionnel — ex: &lt;@ID&gt; ou &lt;@&amp;ID&gt;)</label><input type="text" id="cmd-mention" placeholder="Ex. <@123456789012345678>"></div>
+        <div class="field wide" id="cmd-mention-field"><label>Mention à pinguer sur ce webhook (optionnel)</label><input type="text" id="cmd-mention" placeholder="Ex. <@ID> (personne) ou <@&ID> (rôle)"></div>
       </div>
 
       <nav class="tabs" id="cmdCatTabs"></nav>
@@ -1658,12 +1661,24 @@ function renderEntreprisesWebhooksPanel(){
     return;
   }
   host.innerHTML = entries.map(e =>
-    '<div class="hist-row" style="grid-template-columns:1fr 2fr auto;">' +
+    '<div class="hist-row" style="grid-template-columns:1fr 2fr auto auto;">' +
     '<span class="hist-user">' + escapeHtml(e.nom) + (e.mention ? '<br><span class="hint">' + escapeHtml(e.mention) + '</span>' : '') + '</span>' +
     '<span class="hist-details" style="word-break:break-all;">' + escapeHtml(e.webhook) + '</span>' +
+    '<button class="btn secondary ew-edit" data-key="' + normalizeEntrepriseName(e.nom) + '">Modifier</button>' +
     '<button class="btn secondary ew-delete" data-key="' + normalizeEntrepriseName(e.nom) + '" style="border-color:var(--accent);color:var(--accent);">Supprimer</button>' +
     '</div>'
   ).join('');
+  host.querySelectorAll('.ew-edit').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const key = btn.getAttribute('data-key');
+      const entry = clientRegistries[currentWebhookScope].data[key];
+      if(!entry) return;
+      document.getElementById('ew-new-name').value = entry.nom;
+      document.getElementById('ew-new-url').value = entry.webhook;
+      document.getElementById('ew-new-mention').value = entry.mention || '';
+      document.getElementById('ew-error').textContent = 'Modifie les champs ci-dessous puis clique sur "Ajouter" pour enregistrer les changements.';
+    });
+  });
   host.querySelectorAll('.ew-delete').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const key = btn.getAttribute('data-key');
@@ -2364,6 +2379,26 @@ document.getElementById('ew-add').addEventListener('click', async ()=>{
   document.getElementById('ew-new-name').value = '';
   document.getElementById('ew-new-url').value = '';
   document.getElementById('ew-new-mention').value = '';
+  renderEntreprisesWebhooksPanel();
+});
+
+document.getElementById('ew-fix-mentions').addEventListener('click', async ()=>{
+  const reg = clientRegistries[currentWebhookScope];
+  let fixed = 0;
+  Object.values(reg.data).forEach(entry=>{
+    if(entry.mention && /^<@\d+>$/.test(entry.mention.trim())){
+      entry.mention = entry.mention.trim().replace('<@', '<@&');
+      fixed++;
+    }
+  });
+  const errEl = document.getElementById('ew-error');
+  if(fixed === 0){
+    errEl.textContent = 'Aucune mention à corriger (toutes ont déjà le bon format ou sont vides).';
+    return;
+  }
+  await persistClientRegistry(currentWebhookScope);
+  logAction('Mentions corrigées (format rôle)', fixed + ' entrée(s)');
+  errEl.textContent = fixed + ' mention(s) corrigée(s) : le & a été ajouté.';
   renderEntreprisesWebhooksPanel();
 });
 
