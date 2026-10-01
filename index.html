@@ -1271,6 +1271,7 @@
             <option value="livraison">Je souhaite être livré</option>
           </select>
         </div>
+        <div class="field wide"><label>Tes disponibilités (optionnel)</label><input type="text" id="cmd-dispo-initiale" placeholder="Ex. disponible ce soir après 19h, ou n'importe quand ce week-end"></div>
         <div class="field wide" id="cmd-contact-field"><label>Lien webhook Discord (uniquement si Umami n'en a pas déjà configuré un pour votre entreprise)</label><input type="text" id="cmd-contact" placeholder="Ex. https://discord.com/api/webhooks/..."></div>
         <div class="field wide" id="cmd-mention-field"><label>Mention à pinguer sur ce webhook (optionnel)</label><input type="text" id="cmd-mention" placeholder="Ex. <@ID> (personne) ou <@&ID> (rôle)"></div>
       </div>
@@ -3179,6 +3180,7 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
   const tel = document.getElementById('cmd-tel').value.trim();
   const manualWebhook = document.getElementById('cmd-contact').value.trim();
   const manualMention = document.getElementById('cmd-mention').value.trim();
+  const dispoInitiale = document.getElementById('cmd-dispo-initiale').value.trim();
   const zone = document.getElementById('cmd-zone').value;
   const modeLivraison = document.getElementById('cmd-livraison').value;
   const errEl = document.getElementById('cmd-error');
@@ -3196,7 +3198,7 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
   const poids = lignes.reduce((s,l)=>s+l.qte, 0);
 
   const order = {
-    client, tel, clientWebhook, clientMention, zone, modeLivraison, espace: cmdSpaceType, lignes,
+    client, tel, clientWebhook, clientMention, zone, modeLivraison, dispoInitiale, espace: cmdSpaceType, lignes,
     sousTotalHT, ttc, poids,
     ts: Date.now(),
     statut: 'en_attente'
@@ -3218,6 +3220,7 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
       lignes.map(l => '• ' + l.nom + ' x' + l.qte + ' — ' + formatMoneyPlain(l.prixTotal)).join('\n') +
       '\n**Total TTC : ' + formatMoneyPlain(ttc) + '**\nRéférence : `' + refKey + '`' +
       (tel ? '\nTéléphone : ' + tel : '') +
+      (dispoInitiale ? '\n📅 Disponibilités : ' + dispoInitiale : '') +
       (SITE_URL ? '\n🔗 ' + SITE_URL : '');
 
     const msg = await discordPost(
@@ -3641,6 +3644,7 @@ function openCommandeDetail(order){
     (order.tel ? '<p style="padding:0 24px 4px;">Téléphone : ' + escapeHtml(order.tel) + '</p>' : '') +
     (order.clientWebhook ? '<p style="padding:0 24px 4px;">Webhook client : configuré ✓</p>' : '') +
     '<p style="padding:0 24px 4px;">Souhaite : ' + (order.modeLivraison === 'livraison' ? '🚚 Être livré' : '🍱 Récupérer sur place') + '</p>' +
+    (order.dispoInitiale ? '<p style="padding:0 24px 4px;color:var(--gold);">📅 Disponibilités (données à la commande) : ' + escapeHtml(order.dispoInitiale) + '</p>' : '') +
     (order.prete ? '<p style="padding:0 24px 4px;color:var(--gold);font-weight:bold;">' + (order.modeLivraison === 'livraison' ? '🚚 Commande marquée prête (livraison)' : '🍱 Commande marquée prête (récupération)') + '</p>' : '') +
     (order.disponibilite ? '<p style="padding:0 24px 12px;color:var(--gold);">📅 Disponibilité du client : ' + escapeHtml(order.disponibilite) + '</p>' : '') +
     (order.archivee ? '<p style="padding:0 24px 12px;color:var(--text-muted);font-weight:bold;">📦 Commande archivée</p>' : '');
