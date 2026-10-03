@@ -2897,7 +2897,7 @@ const SITE_URL = "https://antho6262.github.io/registre-umami/";
 // Webhook d'un salon dédié aux factures payées (optionnel). Laisse vide pour désactiver.
 const DISCORD_INVOICE_WEBHOOK_URL = "https://discord.com/api/webhooks/1547784640155099156/npVEbTDlacU8dD3LYNR9T3NUAeWTjz6csVknjenqp14WKDTU90_ayWn1pTxmRYY723QE";
 // URL du Google Apps Script (voir instructions fournies) — enregistre chaque facture payée dans un Google Sheet
-const GOOGLE_SHEET_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbwCsRRLdy-CJ0et1kccakBt-7QvkEo99Xi1flry1IWFAsnJDjkU8OsCiC0WEXPK-bI/exec";
+const GOOGLE_SHEET_WEBHOOK_URL = "";
 
 const ZONE_TAX_RATES = { Nord: 0.04, Sud: 0.05, Cayo: 0.03 };
 
@@ -3001,6 +3001,18 @@ async function sendInvoiceToFinanceChannel(order){
 async function sendInvoiceToGoogleSheet(order){
   if(!GOOGLE_SHEET_WEBHOOK_URL) return;
   try{
+    let imageBase64 = '';
+    if(typeof html2canvas !== 'undefined'){
+      const wrapper = document.createElement('div');
+      wrapper.style.position = 'fixed';
+      wrapper.style.left = '-9999px';
+      wrapper.style.top = '0';
+      wrapper.innerHTML = generateDevisHTML(order, 'FACTURE');
+      document.body.appendChild(wrapper);
+      const canvas = await html2canvas(wrapper.firstChild, { backgroundColor: null, scale: 2 });
+      document.body.removeChild(wrapper);
+      imageBase64 = canvas.toDataURL('image/png').split(',')[1];
+    }
     await fetch(GOOGLE_SHEET_WEBHOOK_URL, {
       method: 'POST',
       mode: 'no-cors',
@@ -3015,7 +3027,8 @@ async function sendInvoiceToGoogleSheet(order){
         articles: order.lignes.map(l => l.nom + ' x' + l.qte).join(' / '),
         sousTotalHT: order.sousTotalHT,
         ttc: order.ttc,
-        paiementCash: !!order.paiementCash
+        paiementCash: !!order.paiementCash,
+        imageBase64
       })
     });
   }catch(e){ console.error('Erreur envoi Google Sheet', e); }
