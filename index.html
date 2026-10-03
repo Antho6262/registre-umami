@@ -2896,6 +2896,8 @@ const DISCORD_ROLE_IDS = ["1181348873898311762", "1332038089178218526"]; // @Dir
 const SITE_URL = "https://antho6262.github.io/registre-umami/";
 // Webhook d'un salon dédié aux factures payées (optionnel). Laisse vide pour désactiver.
 const DISCORD_INVOICE_WEBHOOK_URL = "https://discord.com/api/webhooks/1547784640155099156/npVEbTDlacU8dD3LYNR9T3NUAeWTjz6csVknjenqp14WKDTU90_ayWn1pTxmRYY723QE";
+// URL du Google Apps Script (voir instructions fournies) — enregistre chaque facture payée dans un Google Sheet
+const GOOGLE_SHEET_WEBHOOK_URL = "";
 
 const ZONE_TAX_RATES = { Nord: 0.04, Sud: 0.05, Cayo: 0.03 };
 
@@ -2993,6 +2995,30 @@ async function sendInvoiceToFinanceChannel(order){
     formData.append('files[0]', blob, 'facture-' + order.ref + '.png');
     await fetch(DISCORD_INVOICE_WEBHOOK_URL, { method: 'POST', body: formData });
   }catch(e){ console.error('Erreur envoi facture salon dédié', e); }
+}
+
+// Enregistre chaque facture payée comme une ligne dans un Google Sheet (via un Google Apps Script déployé en Web App)
+async function sendInvoiceToGoogleSheet(order){
+  if(!GOOGLE_SHEET_WEBHOOK_URL) return;
+  try{
+    await fetch(GOOGLE_SHEET_WEBHOOK_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        reference: order.ref,
+        timestamp: Date.now(),
+        client: order.client,
+        espace: order.espace === 'famille' ? 'Famille' : 'Entreprise',
+        zone: order.zone,
+        modeLivraison: order.modeLivraison === 'livraison' ? 'Livraison' : 'Récupération',
+        articles: order.lignes.map(l => l.nom + ' x' + l.qte).join(' / '),
+        sousTotalHT: order.sousTotalHT,
+        ttc: order.ttc,
+        paiementCash: !!order.paiementCash
+      })
+    });
+  }catch(e){ console.error('Erreur envoi Google Sheet', e); }
 }
 
 let cmdSpaceType = 'entreprise'; // 'famille' | 'entreprise'
@@ -3696,6 +3722,7 @@ document.getElementById('commandePaidBtn').addEventListener('click', async ()=>{
   logAction('Commande marquée payée', currentDetailOrder.client + ' — ' + formatMoneyPlain(currentDetailOrder.ttc));
   await notifyOrderUpdate(currentDetailOrder, '💰 Commande marquée **payée** ✓ Merci !');
   await sendInvoiceToFinanceChannel(currentDetailOrder);
+  await sendInvoiceToGoogleSheet(currentDetailOrder);
   document.getElementById('commandeDetailModal').style.display = 'none';
   renderCommandesList();
 });
