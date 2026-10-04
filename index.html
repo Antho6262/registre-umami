@@ -554,6 +554,7 @@
   body.read-only-mode #toggleAdd,
   body.read-only-mode #invAddBtn,
   body.read-only-mode td.del,
+  body.read-only-mode #dirComptaBtn,
   body.read-only-mode th:last-child{
     display:none !important;
   }
@@ -1117,6 +1118,32 @@
   </section>
 </div>
 
+<div class="modal-backdrop" id="comptaPanel" style="display:none;">
+  <section class="members-panel" style="max-width:640px;">
+    <h2>Enregistrer un justificatif</h2>
+    <p class="hint">Le document est envoyé dans le salon Discord correspondant et enregistré dans le Google Sheet (onglet de la semaine), avec une copie sur Drive.</p>
+    <div class="add-grid" style="margin-top:14px;">
+      <div class="field">
+        <label>Type</label>
+        <select id="compta-type">
+          <option value="facture_payee">Facture payée</option>
+          <option value="tracabilite">Traçabilité des commandes</option>
+        </select>
+      </div>
+      <div class="field"><label id="compta-libelle-label">Fournisseur / libellé</label><input type="text" id="compta-libelle" placeholder="Ex. Cayo Beach"></div>
+      <div class="field"><label>Montant (optionnel)</label><input type="text" id="compta-montant" placeholder="Ex. 12500"></div>
+      <div class="field wide"><label>Détail (optionnel)</label><input type="text" id="compta-detail" placeholder="Ex. livraison alcool"></div>
+      <div class="field wide"><label>Photo / capture du document</label><input type="file" accept="image/*" id="compta-file"></div>
+    </div>
+    <p class="auth-error" id="compta-error"></p>
+    <p class="hint" id="compta-status"></p>
+    <div class="add-actions">
+      <button class="btn secondary" id="comptaClose" type="button">Fermer</button>
+      <button class="btn" id="comptaSubmit" type="button">Envoyer</button>
+    </div>
+  </section>
+</div>
+
 <div class="modal-backdrop" id="entreprisesWebhooksPanel" style="display:none;">
   <section class="members-panel" style="max-width:720px;">
     <h2 id="ew-panel-title">Webhooks entreprises</h2>
@@ -1193,6 +1220,7 @@
       <button id="dirManageMembersBtn" style="display:none;">Gérer les membres</button>
       <button id="dirWebhooksBtn">Webhooks entreprises</button>
       <button id="dirWebhooksFamillesBtn">Webhooks familles</button>
+      <button id="dirComptaBtn">Comptabilité</button>
       <button class="themeToggle">Thème clair/sombre</button>
       <button id="dirBackBtn">← Accueil</button>
       <button id="dirLogoutBtn">Déconnexion</button>
@@ -3762,6 +3790,147 @@ document.getElementById('commandeArchiveBtn').addEventListener('click', async ()
   currentDetailOrder.archivee = true;
   logAction('Commande archivée', currentDetailOrder.client);
   document.getElementById('commandeDetailModal').style.display = 'none';
+});
+
+/* ================= COMPTABILITÉ : justificatifs -> Discord + Google Sheet ================= */
+
+// Webhooks Discord des salons où poster les justificatifs (laisser vide = rien envoyé sur Discord).
+// Si c'est le même salon pour les deux types, mets le même lien dans les deux constantes.
+const DISCORD_FACTURES_PAYEES_WEBHOOK_URL = "";
+const DISCORD_TRACABILITE_WEBHOOK_URL = "";
+
+function comptaWebhookUrl(type){
+  return type === 'tracabilite' ? DISCORD_TRACABILITE_WEBHOOK_URL : DISCORD_FACTURES_PAYEES_WEBHOOK_URL;
+}
+
+// Réduit la photo (1600 px max, JPEG) pour un envoi léger et rapide
+async function compresserImage(file, largeurMax, qualite){
+  const url = URL.createObjectURL(file);
+  try{
+    const img = await new Promise((resolve, reject)=>{
+      const i = new Image();
+      i.onload = ()=> resolve(i);
+      i.onerror = ()=> reject(new Error("Image illisible"));
+      i.src = url;
+    });
+    const ratio = Math.min(1, largeurMax / img.width);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.width * ratio));
+    canvas.height = Math.max(1, Math.round(img.height * ratio));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', qualite));
+    if(!blob) throw new Error("Impossible de préparer l'image");
+    const base64 = canvas.toDataURL('image/jpeg', qualite).split(',')[1];
+    return { blob: blob, base64: base64, mime: 'image/jpeg' };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function majLibelleCompta(){
+  const t = document.getElementById('compta-type').value;
+  document.getElementById('compta-libelle-label').textContent = t === 'tracabilite' ? 'Commande / libellé' : 'Fournisseur / libellé';
+}
+document.getElementById('compta-type').addEventListener('change', majLibelleCompta);
+
+document.getElementById('dirComptaBtn').addEventListener('click', ()=>{
+  document.getElementById('compta-error').textContent = '';
+  document.getElementById('compta-status').textContent = '';
+  majLibelleCompta();
+  document.getElementById('comptaPanel').style.display = 'flex';
+});
+document.getElementById('comptaClose').addEventListener('click', ()=>{
+  document.getElementById('comptaPanel').style.display = 'none';
+});
+
+document.getElementById('comptaSubmit').addEventListener('click', async ()=>{
+  const errEl = document.getElementById('compta-error');
+  const statusEl = document.getElementById('compta-status');
+  const btn = document.getElementById('comptaSubmit');
+  errEl.textContent = '';
+  statusEl.textContent = '';
+
+  const type = document.getElementById('compta-type').value;
+  const libelle = document.getElementById('compta-libelle').value.trim();
+  const montantBrut = document.getElementById('compta-montant').value.trim();
+  const detail = document.getElementById('compta-detail').value.trim();
+  const file = document.getElementById('compta-file').files[0];
+  const webhookUrl = comptaWebhookUrl(type);
+
+  if(!libelle){ errEl.textContent = "Indique un fournisseur ou un libellé."; return; }
+  if(!file && !detail){ errEl.textContent = "Ajoute une photo ou un détail."; return; }
+  if(!GOOGLE_SHEET_WEBHOOK_URL && !webhookUrl){ errEl.textContent = "Aucune destination configurée (Google Sheet / Discord)."; return; }
+
+  btn.disabled = true;
+  statusEl.textContent = 'Envoi en cours…';
+  try{
+    const img = file ? await compresserImage(file, 1600, 0.85) : null;
+    const montant = montantBrut ? parsePrice(montantBrut) : '';
+    const titre = type === 'tracabilite' ? 'Traçabilité des commandes' : 'Facture payée';
+    const auteur = (currentUser && currentUser.nom) ? currentUser.nom : 'Inconnu';
+    const resultats = [];
+
+    // 1) Salon Discord
+    if(webhookUrl){
+      try{
+        const contenu = '🧾 **' + titre + '** — ' + libelle +
+          (montant !== '' ? ' — ' + formatMoneyPlain(montant) : '') +
+          (detail ? '\n' + detail : '') +
+          '\n_Saisi par ' + auteur + '_';
+        let res;
+        if(img){
+          const fd = new FormData();
+          fd.append('payload_json', JSON.stringify({ content: contenu }));
+          fd.append('files[0]', img.blob, 'justificatif.jpg');
+          res = await fetch(webhookUrl, { method: 'POST', body: fd });
+        }else{
+          res = await fetch(webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: contenu }) });
+        }
+        resultats.push(res.ok ? 'Discord ✓' : 'Discord ✗ (erreur ' + res.status + ')');
+      }catch(e){
+        resultats.push('Discord ✗ (réseau)');
+      }
+    }
+
+    // 2) Google Sheet + copie sur Drive (réponse illisible en mode no-cors : à vérifier dans le Sheet)
+    if(GOOGLE_SHEET_WEBHOOK_URL){
+      try{
+        await fetch(GOOGLE_SHEET_WEBHOOK_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            type: type,
+            timestamp: Date.now(),
+            libelle: libelle,
+            montant: montant,
+            detail: detail,
+            auteur: auteur,
+            imageBase64: img ? img.base64 : '',
+            mimeType: img ? img.mime : ''
+          })
+        });
+        resultats.push("Google Sheet envoyé (vérifie l'onglet de la semaine)");
+      }catch(e){
+        resultats.push('Google Sheet ✗ (réseau)');
+      }
+    }
+
+    logAction('Justificatif enregistré', titre + ' — ' + libelle + (montant !== '' ? ' — ' + formatMoneyPlain(montant) : ''));
+    statusEl.textContent = resultats.join(' · ');
+    document.getElementById('compta-libelle').value = '';
+    document.getElementById('compta-montant').value = '';
+    document.getElementById('compta-detail').value = '';
+    document.getElementById('compta-file').value = '';
+  }catch(e){
+    statusEl.textContent = '';
+    errEl.textContent = 'Erreur : ' + e.message;
+  }finally{
+    btn.disabled = false;
+  }
 });
 
 loadCustomData();
