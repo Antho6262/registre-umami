@@ -1127,14 +1127,30 @@
         <label>Type</label>
         <select id="compta-type">
           <option value="facture_payee">Facture payée</option>
+          <option value="virement_recu">Virement reçu (facture faite à la main)</option>
           <option value="tracabilite">Traçabilité des commandes</option>
         </select>
       </div>
       <div class="field"><label id="compta-libelle-label">Fournisseur / libellé</label><input type="text" id="compta-libelle" placeholder="Ex. Cayo Beach"></div>
       <div class="field"><label>Montant (optionnel)</label><input type="text" id="compta-montant" placeholder="Ex. 12500"></div>
+      <div class="field"><label>Date du document</label><input type="date" id="compta-date"></div>
+      <div class="field"><label>Référence (optionnel)</label><input type="text" id="compta-reference" placeholder="Ex. N°19"></div>
+      <div id="compta-extra-virement" style="display:none;">
+        <div class="field"><label>Sous-total HT (optionnel)</label><input type="text" id="compta-ht" placeholder="Ex. 18000"></div>
+        <div class="field">
+          <label>Zone fiscale (optionnel)</label>
+          <select id="compta-zone">
+            <option value="">—</option>
+            <option value="Sud">Sud</option>
+            <option value="Nord">Nord</option>
+            <option value="Cayo">Cayo</option>
+          </select>
+        </div>
+      </div>
       <div class="field wide"><label>Détail (optionnel)</label><input type="text" id="compta-detail" placeholder="Ex. livraison alcool"></div>
       <div class="field wide"><label>Photo / capture du document</label><input type="file" accept="image/*" id="compta-file"></div>
     </div>
+    <p class="hint" id="compta-lecture"></p>
     <p class="auth-error" id="compta-error"></p>
     <p class="hint" id="compta-status"></p>
     <div class="add-actions">
@@ -3792,6 +3808,592 @@ document.getElementById('commandeArchiveBtn').addEventListener('click', async ()
   document.getElementById('commandeDetailModal').style.display = 'none';
 });
 
+/* ---- Lecture automatique des justificatifs : analyse du texte lu (OCR) ---- */
+
+// Fournisseurs déjà connus (nom, numéros de compte, mots qui les identifient dans le texte).
+// Le site en apprend de nouveaux : un nom saisi + un compte lu sont retenus pour la fois suivante.
+const OCR_FOURNISSEURS_DEFAUT = {
+  'postop roxwood':      { nom: 'PostOP Roxwood',      comptes: ['21073'], alias: ['postop roxwood'] },
+  'vcmc':                { nom: 'VCMC',                comptes: ['21128'], alias: ['vcmc', 'v c m c', 'vespucci county medical center'] },
+  'cayo ferme':          { nom: 'Cayo Ferme',          comptes: ['20045'], alias: ['cayo ferme'] },
+  'worldways import':    { nom: 'WorldWays Import',    comptes: ['21053'], alias: ['worldways import', 'worldways'] },
+  'safeguard assurance': { nom: 'SafeGuard Assurance', comptes: ['21112'], alias: ['safeguard assurance', 'safeguard'] },
+  'l abattoir':          { nom: "L'Abattoir",          comptes: ['20024'], alias: ['abattoir'] }
+};
+
+const OCR_MOIS = { janvier: 1, fevrier: 2, mars: 3, avril: 4, mai: 5, juin: 6, juillet: 7, aout: 8, septembre: 9, octobre: 10, novembre: 11, decembre: 12 };
+const OCR_COMPTE_UMAMI = '20050'; // notre propre compte : jamais pris pour celui d'un fournisseur
+
+function ocrSansAccents(s){
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+function ocrNormaliser(s){
+  return ocrSansAccents(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+// "95000,00" / "80 000.00" / "53.900" / "$430 000" -> nombre
+function ocrLireMontant(brut){
+  let s = String(brut).replace(/[\s\u00a0$€]/g, '');
+  if(!/^\d/.test(s)) return null;
+  if(/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');                  // 53.900 -> 53900 (le point sépare les milliers)
+  else if(s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.');    // 1.234,50 ou 80000,00
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+// Tous les montants d'un morceau de texte
+function ocrMontantsDansTexte(texte){
+  const s = String(texte).replace(/(\d)-(?=\d)/g, '$1');   // "100-000,00" (texte barré) -> "100000,00"
+  const re = /(\d{1,3}(?:[ \u00a0]\d{3})+|\d+)([.,]\d{1,3})?/g;
+  const res = [];
+  let m;
+  while((m = re.exec(s)) !== null){
+    const brut = m[0];
+    const avant = s.charAt(m.index - 1);
+    const apres = s.slice(m.index + brut.length, m.index + brut.length + 3);
+    if(avant === '/' || apres.charAt(0) === '/') continue;                  // morceau de date
+    const val = ocrLireMontant(brut);
+    if(val === null) continue;
+    if(/^\s*%/.test(apres) && val < 100) continue;                          // "0%", "5%" : un pourcentage (mais "84000%" = "$" mal lu)
+    res.push(val);
+  }
+  return res;
+}
+
+function ocrRetirerSousTotaux(ligne){
+  return ligne
+    .replace(/(sous[-\s]*total|sub[\s-]*total)\s*(ht)?\s*:?\s*[$€]?\s*\d[\d\s.,]*\s*[$€]?/ig, ' ')
+    .replace(/total\s*ht\s*:?\s*[$€]?\s*\d[\d\s.,]*\s*[$€]?/ig, ' ')
+    .replace(/(sous[-\s]*total|sub[\s-]*total|prix\s+total|total\s*ht)/ig, ' ');
+}
+
+function ocrFinDerniereOccurrence(ligne, regex){
+  const g = new RegExp(regex.source, 'ig');
+  let fin = -1, m;
+  while((m = g.exec(ligne)) !== null){ fin = m.index + m[0].length; if(m[0].length === 0) g.lastIndex++; }
+  return fin;
+}
+
+// Candidats pour le total à payer : "TTC" d'abord (toutes les lignes TTC), puis "Total de la facture / net à payer",
+// puis le dernier "Total"
+function ocrCandidatsTotal(texte){
+  const lignes = String(texte).split(/\r?\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+  const niveaux = [
+    /ttc/i,
+    /total\s+de\s+la\s+facture|net\s+a\s+payer|total\s+a\s+payer|montant\s+total|total\s+general/i,
+    /t[o0]t[a4]l/i
+  ];
+  for(let n = 0; n < niveaux.length; n++){
+    const trouves = [];
+    for(let i = lignes.length - 1; i >= 0; i--){
+      const ligne = ocrRetirerSousTotaux(ocrSansAccents(lignes[i]));
+      const fin = ocrFinDerniereOccurrence(ligne, niveaux[n]);
+      if(fin < 0) continue;
+      let montants = ocrMontantsDansTexte(ligne.slice(fin));
+      if(!montants.length){
+        // montant sur les 2 lignes suivantes (ex. gros total avec l'ancien total barré juste au-dessus)
+        for(let j = i + 1; j <= i + 2 && j < lignes.length; j++){
+          montants = montants.concat(ocrMontantsDansTexte(lignes[j]));
+        }
+      }
+      if(montants.length){
+        trouves.push(montants[montants.length - 1]);
+        if(n > 0) return trouves;            // niveaux 2 et 3 : la dernière occurrence suffit
+      }
+    }
+    if(trouves.length) return trouves;       // niveau TTC : on garde toutes les lignes TTC pour les recouper
+  }
+  return [];
+}
+
+// Sous-total HT lu sur la facture (sert à vérifier le TTC)
+function ocrExtraireHT(texte){
+  const t = ocrSansAccents(texte);
+  const re = /(?:sous[-\s]*total|sub[\s-]*total|total)\s*ht\s*:?\s*[$€]?\s*(\d[\d\s.,]*)/ig;
+  let m, dernier = null;
+  while((m = re.exec(t)) !== null){
+    const v = ocrMontantsDansTexte(m[1]);
+    if(v.length) dernier = v[0];
+  }
+  return dernier;
+}
+
+// Le "$" est parfois lu comme un chiffre (693008 au lieu de 69300$) : on recoupe avec le HT quand il existe
+function ocrChoisirTotal(candidats, ht){
+  const plausible = function(c){ return ht ? (c / ht >= 0.99 && c / ht <= 1.2) : true; };
+  const liste = candidats.map(function(c){
+    if(ht && !plausible(c)){
+      const r = Math.floor(c / 10);
+      if(plausible(r)) return { v: r, corrige: true };
+    }
+    return { v: c, corrige: false };
+  });
+  const valides = liste.filter(function(x){ return plausible(x.v); });
+  const pool = valides.length ? valides : liste;
+  const freq = {};
+  pool.forEach(function(x){ freq[x.v] = (freq[x.v] || 0) + 1; });
+  let best = null, bestN = 0;
+  pool.forEach(function(x){ if(freq[x.v] >= bestN){ best = x; bestN = freq[x.v]; } });   // la plus fréquente ; à égalité, la dernière lue
+  const finitPar8 = !ht && Number.isInteger(best.v) && best.v >= 1000 && best.v % 10 === 8;
+  const incoherent = !!ht && !valides.length;
+  return { valeur: best.v, corrige: best.corrige, suspect: finitPar8 || incoherent };
+}
+
+function ocrExtraireTotalDetail(texte){
+  const c = ocrCandidatsTotal(texte);
+  if(!c.length) return { valeur: null, corrige: false, suspect: false };
+  return ocrChoisirTotal(c, ocrExtraireHT(texte));
+}
+
+function ocrExtraireTotal(texte){
+  return ocrExtraireTotalDetail(texte).valeur;
+}
+
+// Date du document : 04/10/2026, 2026-09-30 ou "2 octobre 2026" (la première date valide du texte)
+function ocrExtraireDate(texte){
+  const t = ocrSansAccents(texte).toLowerCase();
+  const c = [];
+  let m;
+  const r1 = /\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/g;
+  while((m = r1.exec(t)) !== null) c.push({ pos: m.index, j: +m[1], mo: +m[2], a: +m[3] });
+  const r2 = /\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g;
+  while((m = r2.exec(t)) !== null) c.push({ pos: m.index, j: +m[3], mo: +m[2], a: +m[1] });
+  const r3 = /\b(\d{1,2})\s+(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)\s+(\d{4})\b/g;
+  while((m = r3.exec(t)) !== null) c.push({ pos: m.index, j: +m[1], mo: OCR_MOIS[m[2]], a: +m[3] });
+  c.sort(function(x, y){ return x.pos - y.pos; });
+  for(let i = 0; i < c.length; i++){
+    const d = c[i];
+    if(d.a < 2020 || d.a > 2100 || d.mo < 1 || d.mo > 12 || d.j < 1 || d.j > 31) continue;
+    const test = new Date(d.a, d.mo - 1, d.j);
+    if(test.getMonth() !== d.mo - 1) continue;                     // 31/02 etc.
+    const p2 = function(n){ return String(n).padStart(2, '0'); };
+    return { iso: d.a + '-' + p2(d.mo) + '-' + p2(d.j), affichage: p2(d.j) + '/' + p2(d.mo) + '/' + d.a };
+  }
+  return null;
+}
+
+// Numéro de compte / RIB du fournisseur (5 chiffres près de "compte", "RIB" ou "virement au")
+function ocrExtraireCompte(texte){
+  const re = /(?:compte|rib|virement\s+au)[^0-9\n]{0,40}?(\d{5})(?!\d)/gi;
+  let m;
+  while((m = re.exec(texte)) !== null){
+    if(m[1] !== OCR_COMPTE_UMAMI) return m[1];
+  }
+  return null;
+}
+
+function ocrExtraireReference(texte){
+  const compter = function(motifs){
+    const tous = [];
+    motifs.forEach(function(re){ (texte.match(re) || []).forEach(function(x){ tous.push(x); }); });
+    if(!tous.length) return '';
+    const freq = {};
+    tous.forEach(function(x){ freq[x] = (freq[x] || 0) + 1; });
+    let best = '', bestN = 0;
+    tous.forEach(function(x){ if(freq[x] >= bestN){ best = x; bestN = freq[x]; } });   // à égalité : la dernière lue
+    return best;
+  };
+  let r = compter([/\bCMD-\d{6}-\d{4}\b/g, /\bCMD-\d{4}-[A-Z0-9]{4}\b/g, /\b[A-Z]{3,6}-\d{4}-\d{2,4}\b/g]);
+  if(r) return r;
+  const m = texte.match(/N[°o]\s*de\s*la\s*facture\s*:?\s*(N[°o]?\s*\d+)/i);
+  if(m) return m[1].replace(/\s+/g, '');
+  const m2 = texte.match(/\b\d{6}-\d{3}\b/);
+  return m2 ? m2[0] : '';
+}
+
+// Fournisseur : d'abord par numéro de compte, puis par nom. S'il y a un doute, on ne devine pas.
+function ocrTrouverFournisseur(texte, compte, registre){
+  const entrees = Object.keys(registre).map(function(k){ return registre[k]; });
+  if(compte){
+    const parCompte = entrees.filter(function(f){ return (f.comptes || []).indexOf(compte) !== -1; });
+    if(parCompte.length === 1) return { fournisseur: parCompte[0], ambigus: [] };
+  }
+  const n = ' ' + ocrNormaliser(texte) + ' ';
+  const hits = entrees.filter(function(f){
+    return (f.alias || []).some(function(a){ const na = ocrNormaliser(a); return na && n.indexOf(' ' + na + ' ') !== -1; });
+  });
+  if(hits.length === 1) return { fournisseur: hits[0], ambigus: [] };
+  return { fournisseur: null, ambigus: hits };
+}
+
+
+// ---- Factures émises par Umami (faites à la main ou par le site) ----
+
+// Notre propre facture : en-tête "Restaurant Umami" + notre RIB
+function ocrEstEmisParUmami(texte){
+  return ocrNormaliser(texte).indexOf('restaurant umami') !== -1 &&
+         new RegExp('(?:rib|compte)[^0-9\\n]{0,40}' + OCR_COMPTE_UMAMI + '(?!\\d)', 'i').test(texte);
+}
+
+function ocrNettoyerLigne(s){
+  return String(s).replace(/[|_~\[\]]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Client : la ligne qui suit "Client :" (ou le texte qui suit sur la même ligne s'il est assez long)
+function ocrExtraireClient(texte){
+  const lignes = String(texte).split(/\r?\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+  const refus = /zone\s*fiscale|description|facture/i;
+  for(let i = 0; i < lignes.length; i++){
+    const m = lignes[i].match(/^client\s*:?\s*(.*)$/i);
+    if(!m) continue;
+    const reste = ocrNettoyerLigne(m[1]);
+    if(reste.length >= 4 && /[a-z]{3}/i.test(reste) && !refus.test(reste)) return reste;
+    const suivante = lignes[i + 1] ? ocrNettoyerLigne(lignes[i + 1]) : '';
+    if(suivante && /[a-z0-9]{2}/i.test(suivante) && !refus.test(suivante)) return suivante;
+    return '';
+  }
+  return '';
+}
+
+// La zone fiscale se déduit du taux (TTC / HT) : plus fiable que de lire les cases cochées
+function ocrZoneDepuisTaux(ht, ttc){
+  if(!ht || !ttc) return '';
+  const r = ttc / ht;
+  const taux = [['Cayo', 1.03], ['Nord', 1.04], ['Sud', 1.05]];
+  for(let i = 0; i < taux.length; i++){
+    if(Math.abs(r - taux[i][1]) < 0.004) return taux[i][0];
+  }
+  return '';
+}
+
+// Lignes d'articles entre l'en-tête "Description ..." et les totaux : "Menu X x330"
+function ocrExtraireArticles(texte){
+  const lignes = String(texte).split(/\r?\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+  let debut = -1;
+  for(let i = 0; i < lignes.length; i++){ if(/^description\b/i.test(lignes[i])){ debut = i; break; } }
+  if(debut < 0) return '';
+  const res = [];
+  for(let i = debut + 1; i < lignes.length; i++){
+    const l = lignes[i];
+    if(/poids|sous[-\s]*total|ttc|total/i.test(l)) break;
+    const m = l.match(/^([^\d]{4,}?)\s+(\d{1,6})\s+\S/);
+    if(!m) continue;
+    const desc = ocrNettoyerLigne(m[1]);
+    const qte = parseInt(m[2], 10);
+    if(!/[a-z]{3}/i.test(desc) || !(qte > 0)) continue;
+    res.push(desc + ' x' + qte);
+  }
+  return res.join(' / ');
+}
+
+function ocrAnalyser(texte, registre){
+  const compte = ocrExtraireCompte(texte);
+  const f = ocrTrouverFournisseur(texte, compte, registre);
+  const tot = ocrExtraireTotalDetail(texte);
+  const ht = ocrExtraireHT(texte);
+  const reference = ocrExtraireReference(texte);
+  return {
+    emisParUmami: ocrEstEmisParUmami(texte),
+    client: ocrExtraireClient(texte),
+    ht: ht,
+    zone: ocrZoneDepuisTaux(ht, tot.valeur),
+    articles: ocrExtraireArticles(texte),
+    refSite: /^CMD-\d{4}-[A-Z0-9]{4}$/.test(reference),
+    date: ocrExtraireDate(texte),
+    total: tot.valeur,
+    totalCorrige: tot.corrige,
+    totalSuspect: tot.suspect,
+    compte: compte,
+    reference: reference,
+    estDevis: /\bdevis\b/i.test(ocrSansAccents(texte)),
+    fournisseur: f.fournisseur,
+    ambigus: f.ambigus
+  };
+}
+
+// Deux lectures (image normale + image inversée) : on garde la première et on complète avec la seconde
+function ocrFusionner(a, b){
+  const garderA = (a.total !== null && a.total !== undefined);
+  const total = garderA ? a.total : b.total;
+  const ht = (a.ht !== null && a.ht !== undefined) ? a.ht : b.ht;
+  return {
+    emisParUmami: a.emisParUmami || b.emisParUmami,
+    client: a.client || b.client,
+    ht: ht,
+    zone: ocrZoneDepuisTaux(ht, total),
+    articles: a.articles || b.articles,
+    refSite: a.refSite || b.refSite,
+    date: a.date || b.date,
+    total: total,
+    totalCorrige: garderA ? a.totalCorrige : b.totalCorrige,
+    totalSuspect: garderA ? a.totalSuspect : b.totalSuspect,
+    compte: a.compte || b.compte,
+    reference: a.reference || b.reference,
+    estDevis: a.estDevis || b.estDevis,
+    fournisseur: a.fournisseur || b.fournisseur,
+    ambigus: a.fournisseur ? [] : (a.ambigus.length ? a.ambigus : b.ambigus)
+  };
+}
+
+function ocrAvertissements(an, modeVirement){
+  const w = [];
+  if(an.refSite) w.push("Cette facture vient du site : elle est déjà enregistrée automatiquement quand la commande est marquée payée. Ne l'envoie pas une seconde fois.");
+  if(an.estDevis) w.push("Ce document est un DEVIS, pas une facture.");
+  if(an.total === null || an.total === undefined) w.push("Montant non lu : saisis-le.");
+  else if(an.totalSuspect) w.push("Montant à vérifier : le « $ » a peut-être été lu comme un chiffre.");
+  else if(an.totalCorrige) w.push("Montant corrigé automatiquement (le « $ » avait été lu comme un chiffre) : vérifie-le.");
+  if(!an.date) w.push("Date non lue : vérifie la date du document.");
+  if(modeVirement || an.emisParUmami){
+    if(!an.client) w.push("Client non lu : saisis-le.");
+  } else if(!an.fournisseur){
+    if(an.ambigus.length) w.push("Plusieurs fournisseurs possibles (" + an.ambigus.map(function(f){ return f.nom; }).join(', ') + ") : saisis le bon.");
+    else if(an.compte) w.push("Fournisseur inconnu (compte " + an.compte + ") : saisis son nom, il sera reconnu la prochaine fois.");
+    else w.push("Fournisseur non reconnu : saisis son nom.");
+  }
+  return w;
+}
+
+/* ---- Lecture automatique des justificatifs : module de lecture, mémoire des fournisseurs, remplissage du formulaire ---- */
+
+let comptaFournisseurs = null;     // fournisseurs connus : ceux d'origine + ceux appris (Firebase)
+let comptaCompteDetecte = '';      // numéro de compte lu sur le document en cours
+let ocrWorkerPromise = null;       // moteur de lecture, chargé une seule fois
+let comptaLectureId = 0;           // pour ignorer une lecture périmée si un autre fichier est choisi entre-temps
+
+const CHAMPS_COMPTA_AUTO = ['compta-libelle', 'compta-montant', 'compta-date', 'compta-reference', 'compta-ht', 'compta-zone', 'compta-detail'];
+
+function dateAujourdhuiIso(){
+  const d = new Date();
+  const p = function(n){ return String(n).padStart(2, '0'); };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+// Date choisie dans le formulaire -> horodatage envoyé au Sheet.
+// Document daté d'un autre jour : il est classé dans la semaine de sa date, sans heure (midi par convention).
+function horodatageCompta(dateIso){
+  if(!dateIso || dateIso === dateAujourdhuiIso()) return { timestamp: Date.now(), heureInconnue: false, affichage: '' };
+  const p = dateIso.split('-').map(Number);
+  const p2 = function(n){ return String(n).padStart(2, '0'); };
+  return { timestamp: new Date(p[0], p[1] - 1, p[2], 12, 0, 0).getTime(), heureInconnue: true, affichage: p2(p[2]) + '/' + p2(p[1]) + '/' + p[0] };
+}
+
+function assurerDateParDefautCompta(){
+  const el = document.getElementById('compta-date');
+  if(!el.value){ el.value = dateAujourdhuiIso(); el.dataset.auto = '1'; }
+}
+
+// Un champ rempli par la lecture peut être remplacé par une nouvelle lecture ; un champ tapé à la main, jamais
+function remplirChampAuto(id, valeur){
+  if(valeur === '' || valeur === null || valeur === undefined) return false;
+  const el = document.getElementById(id);
+  if(!el.value || el.dataset.auto === '1'){ el.value = valeur; el.dataset.auto = '1'; return true; }
+  return false;
+}
+
+function viderChampsAutoCompta(){
+  CHAMPS_COMPTA_AUTO.forEach(function(id){
+    const el = document.getElementById(id);
+    if(el.dataset.auto === '1'){ el.value = ''; el.dataset.auto = ''; }
+  });
+}
+
+CHAMPS_COMPTA_AUTO.forEach(function(id){
+  document.getElementById(id).addEventListener('input', function(){ this.dataset.auto = '0'; });
+});
+
+// Le type est repassé à "Facture payée" si c'est la lecture (et non l'utilisateur) qui l'avait basculé sur "Virement reçu"
+function reinitialiserTypeAutoCompta(){
+  const sel = document.getElementById('compta-type');
+  if(sel.dataset.auto === '1'){
+    sel.value = 'facture_payee';
+    sel.dataset.auto = '';
+    if(typeof majLibelleCompta === 'function') majLibelleCompta();
+  }
+}
+document.getElementById('compta-type').addEventListener('change', function(){ this.dataset.auto = '0'; });
+
+// ---------- Fournisseurs connus ----------
+
+async function chargerFournisseursCompta(){
+  if(comptaFournisseurs) return comptaFournisseurs;
+  const reg = JSON.parse(JSON.stringify(OCR_FOURNISSEURS_DEFAUT));
+  if(db){
+    try{
+      const snap = await db.ref('comptabilite_fournisseurs').once('value');
+      const stocke = snap.val() || {};
+      Object.keys(stocke).forEach(function(k){
+        const e = stocke[k];
+        if(!e || !e.nom) return;
+        const base = reg[k] || { nom: e.nom, comptes: [], alias: [] };
+        base.nom = e.nom;
+        base.comptes = Array.from(new Set((base.comptes || []).concat(e.comptes || [])));
+        base.alias = Array.from(new Set((base.alias || []).concat(e.alias || [])));
+        reg[k] = base;
+      });
+    }catch(e){ console.error('Fournisseurs de la comptabilité', e); }
+  }
+  comptaFournisseurs = reg;
+  return reg;
+}
+
+// Après un envoi : nom saisi + compte lu = fournisseur reconnu automatiquement la prochaine fois
+async function apprendreFournisseurCompta(nom, compte){
+  if(!nom || !compte || !db) return;
+  const reg = await chargerFournisseursCompta();
+  const dejaConnu = Object.keys(reg).some(function(k){ return (reg[k].comptes || []).indexOf(compte) !== -1; });
+  if(dejaConnu) return;                                   // compte déjà rattaché à un fournisseur : on ne modifie rien
+  const cle = ocrNormaliser(nom);
+  if(!cle) return;
+  const f = reg[cle] || { nom: nom, comptes: [], alias: [] };
+  f.comptes = (f.comptes || []).concat([compte]);
+  if(cle.length >= 6 && !(f.alias || []).length) f.alias = [cle];   // un nom trop court risquerait de reconnaître un autre fournisseur
+  reg[cle] = f;
+  try{ await db.ref('comptabilite_fournisseurs').set(reg); }
+  catch(e){ console.error('Enregistrement du fournisseur', e); }
+}
+
+// ---------- Module de lecture (Tesseract.js, exécuté dans le navigateur : l'image ne quitte pas l'appareil) ----------
+
+function chargerTesseract(){
+  if(window.Tesseract) return Promise.resolve(window.Tesseract);
+  if(chargerTesseract.promesse) return chargerTesseract.promesse;
+  chargerTesseract.promesse = new Promise(function(resolve, reject){
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    s.onload = function(){ resolve(window.Tesseract); };
+    s.onerror = function(){ chargerTesseract.promesse = null; reject(new Error('module de lecture non chargé')); };
+    document.head.appendChild(s);
+  });
+  return chargerTesseract.promesse;
+}
+
+function obtenirWorkerOcr(){
+  if(!ocrWorkerPromise){
+    ocrWorkerPromise = (async function(){
+      const T = await chargerTesseract();
+      const worker = await T.createWorker('eng', 1, {
+        logger: function(m){
+          if(m && m.status === 'recognizing text'){
+            const zone = document.getElementById('compta-lecture');
+            if(zone.dataset.lecture === '1') zone.textContent = 'Lecture du document… ' + Math.round(m.progress * 100) + ' %';
+          }
+        }
+      });
+      await worker.setParameters({ tessedit_pageseg_mode: '4' });
+      return worker;
+    })().catch(function(e){ ocrWorkerPromise = null; throw e; });
+  }
+  return ocrWorkerPromise;
+}
+
+function chargerImageDepuisUrl(url){
+  return new Promise(function(resolve, reject){
+    const i = new Image();
+    i.onload = function(){ resolve(i); };
+    i.onerror = function(){ reject(new Error('image illisible')); };
+    i.src = url;
+  });
+}
+
+// Image préparée pour la lecture : petites images agrandies (~2200 px), très grandes réduites (2400 px), éventuellement inversée
+async function canvasPourOcr(file, inverser){
+  const url = URL.createObjectURL(file);
+  try{
+    const img = await chargerImageDepuisUrl(url);
+    let echelle = 1;
+    if(img.width < 1800) echelle = 2200 / img.width;
+    else if(img.width > 2400) echelle = 2400 / img.width;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.width * echelle));
+    canvas.height = Math.max(1, Math.round(img.height * echelle));
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    if(inverser){
+      const donnees = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const px = donnees.data;
+      for(let i = 0; i < px.length; i += 4){
+        const gris = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
+        px[i] = px[i + 1] = px[i + 2] = 255 - gris;
+      }
+      ctx.putImageData(donnees, 0, 0);
+    }
+    return canvas;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function lireDocumentCompta(file){
+  const id = ++comptaLectureId;
+  const zone = document.getElementById('compta-lecture');
+  zone.dataset.lecture = '1';
+  zone.textContent = 'Lecture du document… (la première fois, le module de lecture se télécharge : quelques secondes)';
+  try{
+    const registre = await chargerFournisseursCompta();
+    const worker = await obtenirWorkerOcr();
+    const lire = async function(inverser){
+      const canvas = await canvasPourOcr(file, inverser);
+      const r = await worker.recognize(canvas);
+      return (r && r.data && r.data.text) ? r.data.text : '';
+    };
+    const typeChoisi = document.getElementById('compta-type').value;
+    const enModeVirement = function(a){ return a.emisParUmami || typeChoisi === 'virement_recu'; };
+    const incomplet = function(a){ return !a.date || a.total === null || (enModeVirement(a) ? !a.client : !a.fournisseur); };
+    let analyse = ocrAnalyser(await lire(false), registre);
+    if(incomplet(analyse)){
+      zone.textContent = 'Lecture du document… (seconde passe)';
+      analyse = ocrFusionner(analyse, ocrAnalyser(await lire(true), registre));
+    }
+    if(id !== comptaLectureId) return;
+    zone.dataset.lecture = '';
+    appliquerLectureCompta(analyse);
+  }catch(e){
+    if(id !== comptaLectureId) return;
+    zone.dataset.lecture = '';
+    zone.textContent = 'Lecture automatique indisponible (' + (e && e.message ? e.message : 'erreur') + ') : remplis les champs à la main.';
+    assurerDateParDefautCompta();
+  }
+}
+
+function appliquerLectureCompta(an){
+  comptaCompteDetecte = an.compte || '';
+  const choixType = document.getElementById('compta-type');
+  const basculeAuto = !!an.emisParUmami && choixType.value !== 'virement_recu';
+  if(basculeAuto){ choixType.value = 'virement_recu'; choixType.dataset.auto = '1'; }   // notre propre facture : c'est un virement reçu
+  const modeVirement = choixType.value === 'virement_recu';
+  if(typeof majLibelleCompta === 'function') majLibelleCompta();
+
+  const lus = [];
+  if(modeVirement){
+    if(an.client){ remplirChampAuto('compta-libelle', an.client); lus.push(an.client); }
+    if(an.ht !== null && an.ht !== undefined) remplirChampAuto('compta-ht', String(an.ht).replace('.', ','));
+    if(an.zone){ remplirChampAuto('compta-zone', an.zone); lus.push('zone ' + an.zone); }
+    if(an.articles) remplirChampAuto('compta-detail', an.articles);
+  }else if(an.fournisseur){
+    remplirChampAuto('compta-libelle', an.fournisseur.nom);
+    lus.push(an.fournisseur.nom);
+  }
+  if(an.total !== null && an.total !== undefined){
+    remplirChampAuto('compta-montant', String(an.total).replace('.', ','));
+    lus.push(formatMoneyPlain(an.total));
+  }
+  if(an.date){ remplirChampAuto('compta-date', an.date.iso); lus.push(an.date.affichage); }
+  if(an.reference){ remplirChampAuto('compta-reference', an.reference); lus.push('réf. ' + an.reference); }
+  assurerDateParDefautCompta();
+
+  const w = ocrAvertissements(an, modeVirement);
+  const zone = document.getElementById('compta-lecture');
+  zone.innerHTML =
+    (basculeAuto ? "Facture émise par Umami : classée en « Virement reçu ». " : '') +
+    (lus.length ? 'Lu automatiquement : <b>' + escapeHtml(lus.join(' · ')) + "</b>. Vérifie avant d'envoyer." : "Rien de fiable n'a pu être lu.") +
+    (w.length ? '<br><span style="color:var(--accent);">⚠ ' + w.map(escapeHtml).join('<br>⚠ ') + '</span>' : '');
+}
+
+document.getElementById('compta-file').addEventListener('change', function(){
+  const f = this.files && this.files[0];
+  reinitialiserTypeAutoCompta();
+  viderChampsAutoCompta();
+  comptaCompteDetecte = '';
+  comptaLectureId++;
+  const zone = document.getElementById('compta-lecture');
+  zone.dataset.lecture = '';
+  zone.textContent = '';
+  if(f) lireDocumentCompta(f); else assurerDateParDefautCompta();
+});
+
+
 /* ================= COMPTABILITÉ : justificatifs -> Discord + Google Sheet ================= */
 
 // Webhooks Discord des salons où poster les justificatifs (laisser vide = rien envoyé sur Discord).
@@ -3800,7 +4402,9 @@ const DISCORD_FACTURES_PAYEES_WEBHOOK_URL = "";
 const DISCORD_TRACABILITE_WEBHOOK_URL = "";
 
 function comptaWebhookUrl(type){
-  return type === 'tracabilite' ? DISCORD_TRACABILITE_WEBHOOK_URL : DISCORD_FACTURES_PAYEES_WEBHOOK_URL;
+  if(type === 'tracabilite') return DISCORD_TRACABILITE_WEBHOOK_URL;
+  if(type === 'virement_recu') return DISCORD_INVOICE_WEBHOOK_URL;   // même salon que les factures payées par les clients du site
+  return DISCORD_FACTURES_PAYEES_WEBHOOK_URL;
 }
 
 // Réduit la photo (1600 px max, JPEG) pour un envoi léger et rapide
@@ -3832,7 +4436,9 @@ async function compresserImage(file, largeurMax, qualite){
 
 function majLibelleCompta(){
   const t = document.getElementById('compta-type').value;
-  document.getElementById('compta-libelle-label').textContent = t === 'tracabilite' ? 'Commande / libellé' : 'Fournisseur / libellé';
+  document.getElementById('compta-libelle-label').textContent =
+    t === 'tracabilite' ? 'Commande / libellé' : (t === 'virement_recu' ? 'Client (entreprise / famille / groupe)' : 'Fournisseur / libellé');
+  document.getElementById('compta-extra-virement').style.display = (t === 'virement_recu') ? 'contents' : 'none';
 }
 document.getElementById('compta-type').addEventListener('change', majLibelleCompta);
 
@@ -3840,6 +4446,8 @@ document.getElementById('dirComptaBtn').addEventListener('click', ()=>{
   document.getElementById('compta-error').textContent = '';
   document.getElementById('compta-status').textContent = '';
   majLibelleCompta();
+  assurerDateParDefautCompta();
+  chargerFournisseursCompta();
   document.getElementById('comptaPanel').style.display = 'flex';
 });
 document.getElementById('comptaClose').addEventListener('click', ()=>{
@@ -3858,9 +4466,14 @@ document.getElementById('comptaSubmit').addEventListener('click', async ()=>{
   const montantBrut = document.getElementById('compta-montant').value.trim();
   const detail = document.getElementById('compta-detail').value.trim();
   const file = document.getElementById('compta-file').files[0];
+  const reference = document.getElementById('compta-reference').value.trim();
+  const htBrut = document.getElementById('compta-ht').value.trim();
+  const zoneChoisie = document.getElementById('compta-zone').value;
+  const horo = horodatageCompta(document.getElementById('compta-date').value);
   const webhookUrl = comptaWebhookUrl(type);
 
-  if(!libelle){ errEl.textContent = "Indique un fournisseur ou un libellé."; return; }
+  if(!libelle){ errEl.textContent = type === 'virement_recu' ? "Indique le nom du client." : "Indique un fournisseur ou un libellé."; return; }
+  if(type === 'virement_recu' && !montantBrut){ errEl.textContent = "Indique le montant TTC reçu."; return; }
   if(!file && !detail){ errEl.textContent = "Ajoute une photo ou un détail."; return; }
   if(!GOOGLE_SHEET_WEBHOOK_URL && !webhookUrl){ errEl.textContent = "Aucune destination configurée (Google Sheet / Discord)."; return; }
 
@@ -3869,7 +4482,7 @@ document.getElementById('comptaSubmit').addEventListener('click', async ()=>{
   try{
     const img = file ? await compresserImage(file, 1600, 0.85) : null;
     const montant = montantBrut ? parsePrice(montantBrut) : '';
-    const titre = type === 'tracabilite' ? 'Traçabilité des commandes' : 'Facture payée';
+    const titre = { facture_payee: 'Facture payée', tracabilite: 'Traçabilité des commandes', virement_recu: 'Virement reçu' }[type] || 'Justificatif';
     const auteur = (currentUser && currentUser.nom) ? currentUser.nom : 'Inconnu';
     const resultats = [];
 
@@ -3878,6 +4491,8 @@ document.getElementById('comptaSubmit').addEventListener('click', async ()=>{
       try{
         const contenu = '🧾 **' + titre + '** — ' + libelle +
           (montant !== '' ? ' — ' + formatMoneyPlain(montant) : '') +
+          (reference ? ' — réf. ' + reference : '') +
+          (horo.affichage ? ' — document du ' + horo.affichage : '') +
           (detail ? '\n' + detail : '') +
           '\n_Saisi par ' + auteur + '_';
         let res;
@@ -3904,7 +4519,11 @@ document.getElementById('comptaSubmit').addEventListener('click', async ()=>{
           headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({
             type: type,
-            timestamp: Date.now(),
+            timestamp: horo.timestamp,
+            heureInconnue: horo.heureInconnue,
+            reference: reference,
+            ht: (type === 'virement_recu' && htBrut) ? parsePrice(htBrut) : '',
+            zone: type === 'virement_recu' ? zoneChoisie : '',
             libelle: libelle,
             montant: montant,
             detail: detail,
@@ -3921,10 +4540,14 @@ document.getElementById('comptaSubmit').addEventListener('click', async ()=>{
 
     logAction('Justificatif enregistré', titre + ' — ' + libelle + (montant !== '' ? ' — ' + formatMoneyPlain(montant) : ''));
     statusEl.textContent = resultats.join(' · ');
-    document.getElementById('compta-libelle').value = '';
-    document.getElementById('compta-montant').value = '';
+    if(type === 'facture_payee') await apprendreFournisseurCompta(libelle, comptaCompteDetecte);   // seuls les fournisseurs sont mémorisés, pas les clients
+    CHAMPS_COMPTA_AUTO.forEach(function(id){ const c = document.getElementById(id); c.value = ''; c.dataset.auto = ''; });
     document.getElementById('compta-detail').value = '';
     document.getElementById('compta-file').value = '';
+    document.getElementById('compta-lecture').textContent = '';
+    comptaCompteDetecte = '';
+    reinitialiserTypeAutoCompta();
+    assurerDateParDefautCompta();
   }catch(e){
     statusEl.textContent = '';
     errEl.textContent = 'Erreur : ' + e.message;
