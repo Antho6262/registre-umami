@@ -1128,7 +1128,6 @@
         <select id="compta-type">
           <option value="facture_payee">Facture payée</option>
           <option value="virement_recu">Virement reçu (facture faite à la main)</option>
-          <option value="tracabilite">Traçabilité des commandes</option>
         </select>
       </div>
       <div class="field"><label id="compta-libelle-label">Fournisseur / libellé</label><input type="text" id="compta-libelle" placeholder="Ex. Cayo Beach"></div>
@@ -3044,6 +3043,7 @@ async function sendInvoiceToFinanceChannel(order){
 // Enregistre chaque facture payée comme une ligne dans un Google Sheet (via un Google Apps Script déployé en Web App)
 async function sendInvoiceToGoogleSheet(order){
   if(!GOOGLE_SHEET_WEBHOOK_URL) return;
+  if(order.paiementCash) return;        // payée sur place (pas de virement) : non enregistrée dans le Sheet
   try{
     let imageBase64 = '';
     if(typeof html2canvas !== 'undefined'){
@@ -4045,6 +4045,32 @@ function ocrExtraireClient(texte){
   return '';
 }
 
+const OCR_TAUX = [['Sud', 1.05], ['Nord', 1.04], ['Cayo', 1.03]];
+
+// Le TTC doit être le HT x 1,03 / 1,04 / 1,05, au centime près
+function ocrTtcCoherent(ht, ttc){
+  if(!ht || ttc === null || ttc === undefined) return true;      // rien à comparer
+  return OCR_TAUX.some(function(t){ return Math.abs(ttc - Math.round(ht * t[1] * 100) / 100) < 0.005; });
+}
+
+// Un TTC à quelques centimes d'un montant exact est une erreur de lecture (20 800,01 au lieu de 20 800,00) : on l'ajuste
+function ocrAjusterAuCentime(ht, ttc){
+  if(!ht || ht < 1000 || ttc === null || ttc === undefined) return null;
+  for(let i = 0; i < OCR_TAUX.length; i++){
+    const attendu = Math.round(ht * OCR_TAUX[i][1] * 100) / 100;
+    const ecart = Math.abs(ttc - attendu);
+    if(ecart > 0.004 && ecart <= 0.5) return attendu;
+  }
+  return null;
+}
+
+// "21 000 $ (Sud), 20 800 $ (Nord), 20 600 $ (Cayo)" : pour dire quel TTC était attendu
+function ocrTtcAttendus(ht){
+  return OCR_TAUX.map(function(t){
+    return (Math.round(ht * t[1] * 100) / 100).toLocaleString('fr-FR') + ' $ (' + t[0] + ')';
+  }).join(', ');
+}
+
 // La zone fiscale se déduit du taux (TTC / HT) : plus fiable que de lire les cases cochées
 function ocrZoneDepuisTaux(ht, ttc){
   if(!ht || !ttc) return '';
@@ -4082,15 +4108,20 @@ function ocrAnalyser(texte, registre){
   const tot = ocrExtraireTotalDetail(texte);
   const ht = ocrExtraireHT(texte);
   const reference = ocrExtraireReference(texte);
+  let total = tot.valeur;
+  const ajuste = ocrAjusterAuCentime(ht, total);
+  const totalAjuste = ajuste !== null;
+  if(totalAjuste) total = ajuste;
   return {
     emisParUmami: ocrEstEmisParUmami(texte),
     client: ocrExtraireClient(texte),
     ht: ht,
-    zone: ocrZoneDepuisTaux(ht, tot.valeur),
+    zone: ocrZoneDepuisTaux(ht, total),
     articles: ocrExtraireArticles(texte),
     refSite: /^CMD-\d{4}-[A-Z0-9]{4}$/.test(reference),
     date: ocrExtraireDate(texte),
-    total: tot.valeur,
+    total: total,
+    totalAjuste: totalAjuste,
     totalCorrige: tot.corrige,
     totalSuspect: tot.suspect,
     compte: compte,
@@ -4115,6 +4146,7 @@ function ocrFusionner(a, b){
     refSite: a.refSite || b.refSite,
     date: a.date || b.date,
     total: total,
+    totalAjuste: garderA ? a.totalAjuste : b.totalAjuste,
     totalCorrige: garderA ? a.totalCorrige : b.totalCorrige,
     totalSuspect: garderA ? a.totalSuspect : b.totalSuspect,
     compte: a.compte || b.compte,
@@ -4129,9 +4161,13 @@ function ocrAvertissements(an, modeVirement){
   const w = [];
   if(an.refSite) w.push("Cette facture vient du site : elle est déjà enregistrée automatiquement quand la commande est marquée payée. Ne l'envoie pas une seconde fois.");
   if(an.estDevis) w.push("Ce document est un DEVIS, pas une facture.");
+  const enModeVirement = !!(modeVirement || an.emisParUmami);
+  const ttcIncoherent = enModeVirement && an.ht && an.total !== null && an.total !== undefined && !ocrTtcCoherent(an.ht, an.total);
   if(an.total === null || an.total === undefined) w.push("Montant non lu : saisis-le.");
+  else if(ttcIncoherent) w.push("Le TTC (" + an.total.toLocaleString('fr-FR') + " $) ne correspond pas au HT (" + an.ht.toLocaleString('fr-FR') + " $) : attendu " + ocrTtcAttendus(an.ht) + ".");
   else if(an.totalSuspect) w.push("Montant à vérifier : le « $ » a peut-être été lu comme un chiffre.");
   else if(an.totalCorrige) w.push("Montant corrigé automatiquement (le « $ » avait été lu comme un chiffre) : vérifie-le.");
+  if(an.totalAjuste) w.push("Montant ajusté au centime près (HT × taux de la zone) : vérifie-le.");
   if(!an.date) w.push("Date non lue : vérifie la date du document.");
   if(modeVirement || an.emisParUmami){
     if(!an.client) w.push("Client non lu : saisis-le.");
@@ -4396,13 +4432,10 @@ document.getElementById('compta-file').addEventListener('change', function(){
 
 /* ================= COMPTABILITÉ : justificatifs -> Discord + Google Sheet ================= */
 
-// Webhooks Discord des salons où poster les justificatifs (laisser vide = rien envoyé sur Discord).
-// Si c'est le même salon pour les deux types, mets le même lien dans les deux constantes.
+// Webhook Discord du salon des factures que TU paies (laisser vide = rien envoyé sur Discord pour ce type).
 const DISCORD_FACTURES_PAYEES_WEBHOOK_URL = "";
-const DISCORD_TRACABILITE_WEBHOOK_URL = "";
 
 function comptaWebhookUrl(type){
-  if(type === 'tracabilite') return DISCORD_TRACABILITE_WEBHOOK_URL;
   if(type === 'virement_recu') return DISCORD_INVOICE_WEBHOOK_URL;   // même salon que les factures payées par les clients du site
   return DISCORD_FACTURES_PAYEES_WEBHOOK_URL;
 }
@@ -4437,7 +4470,7 @@ async function compresserImage(file, largeurMax, qualite){
 function majLibelleCompta(){
   const t = document.getElementById('compta-type').value;
   document.getElementById('compta-libelle-label').textContent =
-    t === 'tracabilite' ? 'Commande / libellé' : (t === 'virement_recu' ? 'Client (entreprise / famille / groupe)' : 'Fournisseur / libellé');
+    t === 'virement_recu' ? 'Client (entreprise / famille / groupe)' : 'Fournisseur / libellé';
   document.getElementById('compta-extra-virement').style.display = (t === 'virement_recu') ? 'contents' : 'none';
 }
 document.getElementById('compta-type').addEventListener('change', majLibelleCompta);
@@ -4474,6 +4507,11 @@ document.getElementById('comptaSubmit').addEventListener('click', async ()=>{
 
   if(!libelle){ errEl.textContent = type === 'virement_recu' ? "Indique le nom du client." : "Indique un fournisseur ou un libellé."; return; }
   if(type === 'virement_recu' && !montantBrut){ errEl.textContent = "Indique le montant TTC reçu."; return; }
+  if(type === 'virement_recu' && htBrut){
+    const htNum = parsePrice(htBrut), ttcNum = parsePrice(montantBrut);
+    if(!ocrTtcCoherent(htNum, ttcNum) &&
+       !confirm("Le TTC (" + formatMoneyPlain(ttcNum) + ") ne correspond pas au HT (" + formatMoneyPlain(htNum) + ") : attendu " + ocrTtcAttendus(htNum) + ".\nEnvoyer quand même ?")) return;
+  }
   if(!file && !detail){ errEl.textContent = "Ajoute une photo ou un détail."; return; }
   if(!GOOGLE_SHEET_WEBHOOK_URL && !webhookUrl){ errEl.textContent = "Aucune destination configurée (Google Sheet / Discord)."; return; }
 
@@ -4482,7 +4520,7 @@ document.getElementById('comptaSubmit').addEventListener('click', async ()=>{
   try{
     const img = file ? await compresserImage(file, 1600, 0.85) : null;
     const montant = montantBrut ? parsePrice(montantBrut) : '';
-    const titre = { facture_payee: 'Facture payée', tracabilite: 'Traçabilité des commandes', virement_recu: 'Virement reçu' }[type] || 'Justificatif';
+    const titre = { facture_payee: 'Facture payée', virement_recu: 'Virement reçu' }[type] || 'Justificatif';
     const auteur = (currentUser && currentUser.nom) ? currentUser.nom : 'Inconnu';
     const resultats = [];
 
