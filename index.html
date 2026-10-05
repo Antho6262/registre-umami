@@ -1121,7 +1121,7 @@
 <div class="modal-backdrop" id="comptaPanel" style="display:none;">
   <section class="members-panel" style="max-width:640px;">
     <h2>Enregistrer un justificatif</h2>
-    <p class="hint">Le document est envoyé dans le salon Discord correspondant et enregistré dans le Google Sheet (onglet de la semaine), avec une copie sur Drive.</p>
+    <p class="hint">Le document est enregistré dans le Google Sheet (onglet de la semaine), avec une copie sur Drive. Rien n'est posté sur Discord.</p>
     <div class="add-grid" style="margin-top:14px;">
       <div class="field">
         <label>Type</label>
@@ -4430,15 +4430,7 @@ document.getElementById('compta-file').addEventListener('change', function(){
 });
 
 
-/* ================= COMPTABILITÉ : justificatifs -> Discord + Google Sheet ================= */
-
-// Webhook Discord du salon des factures que TU paies (laisser vide = rien envoyé sur Discord pour ce type).
-const DISCORD_FACTURES_PAYEES_WEBHOOK_URL = "";
-
-function comptaWebhookUrl(type){
-  if(type === 'virement_recu') return DISCORD_INVOICE_WEBHOOK_URL;   // même salon que les factures payées par les clients du site
-  return DISCORD_FACTURES_PAYEES_WEBHOOK_URL;
-}
+/* ================= COMPTABILITÉ : justificatifs -> Google Sheet + Drive (rien n'est posté sur Discord) ================= */
 
 // Réduit la photo (1600 px max, JPEG) pour un envoi léger et rapide
 async function compresserImage(file, largeurMax, qualite){
@@ -4503,7 +4495,6 @@ document.getElementById('comptaSubmit').addEventListener('click', async ()=>{
   const htBrut = document.getElementById('compta-ht').value.trim();
   const zoneChoisie = document.getElementById('compta-zone').value;
   const horo = horodatageCompta(document.getElementById('compta-date').value);
-  const webhookUrl = comptaWebhookUrl(type);
 
   if(!libelle){ errEl.textContent = type === 'virement_recu' ? "Indique le nom du client." : "Indique un fournisseur ou un libellé."; return; }
   if(type === 'virement_recu' && !montantBrut){ errEl.textContent = "Indique le montant TTC reçu."; return; }
@@ -4513,7 +4504,7 @@ document.getElementById('comptaSubmit').addEventListener('click', async ()=>{
        !confirm("Le TTC (" + formatMoneyPlain(ttcNum) + ") ne correspond pas au HT (" + formatMoneyPlain(htNum) + ") : attendu " + ocrTtcAttendus(htNum) + ".\nEnvoyer quand même ?")) return;
   }
   if(!file && !detail){ errEl.textContent = "Ajoute une photo ou un détail."; return; }
-  if(!GOOGLE_SHEET_WEBHOOK_URL && !webhookUrl){ errEl.textContent = "Aucune destination configurée (Google Sheet / Discord)."; return; }
+  if(!GOOGLE_SHEET_WEBHOOK_URL){ errEl.textContent = "Le Google Sheet n'est pas configuré."; return; }
 
   btn.disabled = true;
   statusEl.textContent = 'Envoi en cours…';
@@ -4524,31 +4515,7 @@ document.getElementById('comptaSubmit').addEventListener('click', async ()=>{
     const auteur = (currentUser && currentUser.nom) ? currentUser.nom : 'Inconnu';
     const resultats = [];
 
-    // 1) Salon Discord
-    if(webhookUrl){
-      try{
-        const contenu = '🧾 **' + titre + '** — ' + libelle +
-          (montant !== '' ? ' — ' + formatMoneyPlain(montant) : '') +
-          (reference ? ' — réf. ' + reference : '') +
-          (horo.affichage ? ' — document du ' + horo.affichage : '') +
-          (detail ? '\n' + detail : '') +
-          '\n_Saisi par ' + auteur + '_';
-        let res;
-        if(img){
-          const fd = new FormData();
-          fd.append('payload_json', JSON.stringify({ content: contenu }));
-          fd.append('files[0]', img.blob, 'justificatif.jpg');
-          res = await fetch(webhookUrl, { method: 'POST', body: fd });
-        }else{
-          res = await fetch(webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: contenu }) });
-        }
-        resultats.push(res.ok ? 'Discord ✓' : 'Discord ✗ (erreur ' + res.status + ')');
-      }catch(e){
-        resultats.push('Discord ✗ (réseau)');
-      }
-    }
-
-    // 2) Google Sheet + copie sur Drive (réponse illisible en mode no-cors : à vérifier dans le Sheet)
+    // Google Sheet + copie sur Drive (réponse illisible en mode no-cors : à vérifier dans le Sheet)
     if(GOOGLE_SHEET_WEBHOOK_URL){
       try{
         await fetch(GOOGLE_SHEET_WEBHOOK_URL, {
