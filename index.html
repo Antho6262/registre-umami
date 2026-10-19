@@ -1196,6 +1196,17 @@
   </section>
 </div>
 
+<div class="modal-backdrop" id="deliveryPopupModal" style="display:none;z-index:1300;">
+  <section class="members-panel" style="max-width:520px;text-align:center;border-color:var(--gold);">
+    <div style="font-size:48px;margin-bottom:10px;">🚚</div>
+    <h2 style="color:var(--gold);">Commande en cours de livraison !</h2>
+    <p id="deliveryPopupText" style="font-size:15px;margin:14px 0 6px;"></p>
+    <div class="add-actions" style="justify-content:center;margin-top:16px;">
+      <button class="btn secondary" id="deliveryPopupClose" type="button">Fermer</button>
+    </div>
+  </section>
+</div>
+
 <div id="savingIndicator" class="saving-indicator"></div>
 <div id="undoToast"></div>
 
@@ -1208,6 +1219,7 @@
       <button class="btn secondary" id="commandeRefuseBtn" type="button" style="border-color:var(--accent);color:var(--accent);">Refuser</button>
       <button class="btn secondary" id="commandePaidBtn" type="button" style="border-color:var(--ok);color:var(--ok);display:none;">Marquer payée</button>
       <button class="btn secondary" id="commandePretBtn" type="button" style="border-color:var(--gold);color:var(--gold);display:none;">Commande prête</button>
+      <button class="btn secondary" id="commandeLivraisonBtn" type="button" style="border-color:var(--gold);color:var(--gold);display:none;">🚚 En cours de livraison</button>
       <button class="btn secondary" id="commandeArchiveBtn" type="button" style="border-color:var(--text-muted);color:var(--text-muted);display:none;">Archiver</button>
       <button class="btn" id="commandeAcceptBtn" type="button">Accepter</button>
     </div>
@@ -3315,6 +3327,7 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
 
     await db.ref('commandes/' + refKey).set(order);
     rememberMyOrder(refKey);
+    attachMyOrderListener(refKey);
     try{ localStorage.setItem('umami_client_info', JSON.stringify({ client, tel, clientWebhook })); }catch(e){}
     await notifyClientWebhook(order, "📥 Votre commande a bien été envoyée et sera traitée d'ici peu. Référence : " + refKey);
     hideSaving();
@@ -3378,6 +3391,36 @@ const STATUT_BADGE = {
 let myOrdersCache = {};
 let myOrdersListenedRefs = new Set();
 
+function peutMarquerEnLivraison(order){
+  return !!order && order.modeLivraison === 'livraison' && !!order.prete && !order.enLivraison && order.statut !== 'refusee';
+}
+function etatPreteClient(o){
+  if(o.enLivraison) return "🚚 En cours de livraison";
+  if(!o.prete) return "";
+  return o.modeLivraison === 'livraison' ? "📦 Prête — la livraison va bientôt partir" : "🍱 Prête à récupérer";
+}
+function livraisonDejaVue(ref){
+  try{ return (JSON.parse(localStorage.getItem('umami_livraison_vue') || '[]')).indexOf(ref) >= 0; }catch(e){ return false; }
+}
+function marquerLivraisonVue(ref){
+  try{
+    const l = JSON.parse(localStorage.getItem('umami_livraison_vue') || '[]');
+    if(l.indexOf(ref) < 0){ l.push(ref); localStorage.setItem('umami_livraison_vue', JSON.stringify(l)); }
+  }catch(e){}
+}
+function showDeliveryPopup(order){
+  if(livraisonDejaVue(order.ref)) return;
+  marquerLivraisonVue(order.ref);
+  document.getElementById('deliveryPopupText').innerHTML =
+    "Ta commande <b>" + escapeHtml(order.ref) + "</b> est <b>en cours de livraison</b> ! Elle arrive bientôt.";
+  document.getElementById('deliveryPopupModal').style.display = 'flex';
+  try{
+    if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
+      new Notification("Umami — En cours de livraison", { body: "Ta commande " + order.ref + " est en cours de livraison !" });
+    }
+  }catch(e){}
+}
+
 function attachMyOrderListener(ref){
   if(myOrdersListenedRefs.has(ref) || !db) return;
   myOrdersListenedRefs.add(ref);
@@ -3388,6 +3431,11 @@ function attachMyOrderListener(ref){
       myOrdersCache[ref] = o;
       if(o.prete && !o.disponibilite && (!previous || !previous.prete)){
         showReadyPopup(o);
+      }
+      if(o.enLivraison && previous && !previous.enLivraison){
+        showDeliveryPopup(o);
+      }else if(o.enLivraison && !previous){
+        showDeliveryPopup(o);
       }
     }
     renderMyOrdersFromCache();
@@ -3554,7 +3602,7 @@ function renderMyOrdersFromCache(){
       '<div style="display:flex;justify-content:space-between;align-items:center;">' +
       '<b>' + escapeHtml(o.client) + '</b> — <span class="hint">' + escapeHtml(o.ref) + '</span>' +
       '</div>' +
-      '<p>' + (STATUT_BADGE[o.statut] || o.statut) + (o.prete ? ' — <span style="color:var(--gold);font-weight:bold;">' + (o.modeLivraison === 'livraison' ? '🚚 Prête, en cours de livraison' : '🍱 Prête à récupérer') + '</span>' : '') + '</p>' +
+      '<p>' + (STATUT_BADGE[o.statut] || o.statut) + (etatPreteClient(o) ? ' — <span style="color:var(--gold);font-weight:bold;">' + etatPreteClient(o) + '</span>' : '') + '</p>' +
       '<div class="add-actions" style="justify-content:flex-start;">' +
       '<button class="btn secondary view-order" data-ref="' + o.ref + '" type="button">Voir le document</button>' +
       '</div>' +
@@ -3616,6 +3664,9 @@ async function downloadDevisPDF(el, refName){
   pdf.save((refName || 'facture-umami') + '.pdf');
 }
 
+document.getElementById('deliveryPopupClose').addEventListener('click', ()=>{
+  document.getElementById('deliveryPopupModal').style.display = 'none';
+});
 document.getElementById('readyPopupClose').addEventListener('click', ()=>{
   document.getElementById('readyPopupModal').style.display = 'none';
 });
@@ -3728,6 +3779,7 @@ function openCommandeDetail(order){
     (order.clientWebhook ? '<p style="padding:0 24px 4px;">Webhook client : configuré ✓</p>' : '') +
     '<p style="padding:0 24px 4px;">Souhaite : ' + (order.modeLivraison === 'livraison' ? '🚚 Être livré' : '🍱 Récupérer sur place') + '</p>' +
     (order.dispoInitiale ? '<p style="padding:0 24px 4px;color:var(--gold);">📅 Disponibilités (données à la commande) : ' + escapeHtml(order.dispoInitiale) + '</p>' : '') +
+    (order.enLivraison ? '<p style="padding:0 24px 4px;color:var(--gold);font-weight:bold;">🚚 Commande en cours de livraison</p>' : '') +
     (order.prete ? '<p style="padding:0 24px 4px;color:var(--gold);font-weight:bold;">' + (order.modeLivraison === 'livraison' ? '🚚 Commande marquée prête (livraison)' : '🍱 Commande marquée prête (récupération)') + '</p>' : '') +
     (order.disponibilite ? '<p style="padding:0 24px 12px;color:var(--gold);">📅 Disponibilité du client : ' + escapeHtml(order.disponibilite) + '</p>' : '') +
     (order.archivee ? '<p style="padding:0 24px 12px;color:var(--text-muted);font-weight:bold;">📦 Commande archivée</p>' : '');
@@ -3739,6 +3791,7 @@ function openCommandeDetail(order){
   document.getElementById('commandeRefuseBtn').style.display = isPending ? 'inline-block' : 'none';
   document.getElementById('commandePaidBtn').style.display = isValidee ? 'inline-block' : 'none';
   document.getElementById('commandePretBtn').style.display = canMarkReady ? 'inline-block' : 'none';
+  document.getElementById('commandeLivraisonBtn').style.display = peutMarquerEnLivraison(order) ? 'inline-block' : 'none';
   document.getElementById('commandeArchiveBtn').style.display = canArchive ? 'inline-block' : 'none';
   document.getElementById('commandeDetailModal').style.display = 'flex';
 }
@@ -3799,6 +3852,17 @@ async function markCommandePrete(){
 }
 
 document.getElementById('commandePretBtn').addEventListener('click', markCommandePrete);
+
+async function markCommandeEnLivraison(){
+  if(!currentDetailOrder || !db || !peutMarquerEnLivraison(currentDetailOrder)) return;
+  await db.ref('commandes/' + currentDetailOrder.ref).update({ enLivraison: true, enLivraisonTs: Date.now() });
+  currentDetailOrder.enLivraison = true;
+  logAction('Commande en cours de livraison', currentDetailOrder.client);
+  await notifyOrderUpdate(currentDetailOrder, "🚚 Votre commande est **en cours de livraison** ! Elle arrive bientôt.");
+  document.getElementById('commandeDetailModal').style.display = 'none';
+  renderCommandesList();
+}
+document.getElementById('commandeLivraisonBtn').addEventListener('click', markCommandeEnLivraison);
 
 document.getElementById('commandeArchiveBtn').addEventListener('click', async ()=>{
   if(!currentDetailOrder || !db) return;
