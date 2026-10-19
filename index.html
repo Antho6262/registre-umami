@@ -1220,6 +1220,7 @@
       <button class="btn secondary" id="commandePaidBtn" type="button" style="border-color:var(--ok);color:var(--ok);display:none;">Marquer payée</button>
       <button class="btn secondary" id="commandePretBtn" type="button" style="border-color:var(--gold);color:var(--gold);display:none;">Commande prête</button>
       <button class="btn secondary" id="commandeLivraisonBtn" type="button" style="border-color:var(--gold);color:var(--gold);display:none;">🚚 En cours de livraison</button>
+      <button class="btn secondary" id="commandeCancelBtn" type="button" style="border-color:var(--accent);color:var(--accent);display:none;">🚫 Annuler la commande</button>
       <button class="btn secondary" id="commandeArchiveBtn" type="button" style="border-color:var(--text-muted);color:var(--text-muted);display:none;">Archiver</button>
       <button class="btn" id="commandeAcceptBtn" type="button">Accepter</button>
     </div>
@@ -3197,6 +3198,7 @@ function generateDevisHTML(order, docType){
     '<p style="text-align:right;margin-top:14px;color:#e0392a;">Poids : ' + order.poids + ' KG</p>' +
     '<p style="text-align:right;color:#f4ece0;">Sous-total HT : <b>' + formatMoneyPlain(order.sousTotalHT) + '</b></p>' +
     '<p style="text-align:right;font-size:1.3em;color:#f4ece0;">TTC : <b>' + formatMoneyPlain(order.ttc) + '</b></p>' +
+    (order.statut === 'annulee' ? '<p style="color:#e0392a;font-weight:bold;">Commande annulée — merci de refaire une nouvelle commande si besoin.</p>' : '') +
     (order.statut === 'refusee' ? '<p style="color:#e0392a;font-weight:bold;">Commande refusée' + (order.raisonRefus ? ' — ' + escapeHtml(order.raisonRefus) : '') + '</p>' : '') +
     (order.statut === 'en_attente' ? '<p style="color:#c98a2d;font-weight:bold;">En attente de validation par notre équipe. Ceci est un devis, pas encore une facture officielle.</p>' : '') +
     (order.statut === 'validee' ? '<p style="color:#5c8a5c;font-weight:bold;">Commande validée ✓ — En attente de paiement</p>' : '') +
@@ -3385,14 +3387,15 @@ const STATUT_BADGE = {
   en_attente: '<span style="color:var(--warn);">⏳ En attente de validation</span>',
   validee: '<span style="color:var(--ok);">✅ Validée — en attente de paiement</span>',
   payee: '<span style="color:var(--ok);font-weight:bold;">💰 Payée ✓</span>',
-  refusee: '<span style="color:var(--accent);">❌ Refusée</span>'
+  refusee: '<span style="color:var(--accent);">❌ Refusée</span>',
+  annulee: '<span style="color:var(--accent);">🚫 Annulée — à refaire si besoin</span>'
 };
 
 let myOrdersCache = {};
 let myOrdersListenedRefs = new Set();
 
 function peutMarquerEnLivraison(order){
-  return !!order && order.modeLivraison === 'livraison' && !!order.prete && !order.enLivraison && order.statut !== 'refusee';
+  return !!order && order.modeLivraison === 'livraison' && !!order.prete && !order.enLivraison && order.statut !== 'refusee' && order.statut !== 'annulee';
 }
 function etatPreteClient(o){
   if(o.enLivraison) return "🚚 En cours de livraison";
@@ -3429,7 +3432,7 @@ function attachMyOrderListener(ref){
     if(o){
       const previous = myOrdersCache[ref];
       myOrdersCache[ref] = o;
-      if(o.prete && !o.disponibilite && (!previous || !previous.prete)){
+      if(o.prete && o.statut !== 'annulee' && !o.disponibilite && (!previous || !previous.prete)){
         showReadyPopup(o);
       }
       if(o.enLivraison && previous && !previous.enLivraison){
@@ -3731,7 +3734,7 @@ function renderCommandesFromOrders(allOrders){
     host.innerHTML = '<p class="hint">' + (showArchivedOrders ? 'Aucune commande archivée.' : 'Aucune commande active pour le moment.') + '</p>';
     return;
   }
-  const STATUT_LABEL = { en_attente:'⏳ En attente', validee:'✅ Validée', payee:'💰 Payée', refusee:'❌ Refusée' };
+  const STATUT_LABEL = { en_attente:'⏳ En attente', validee:'✅ Validée', payee:'💰 Payée', refusee:'❌ Refusée', annulee:'🚫 Annulée' };
   if(countEl) countEl.textContent = orders.length + ' commande' + (orders.length>1?'s':'') + (showArchivedOrders ? ' archivée' + (orders.length>1?'s':'') : ' active' + (orders.length>1?'s':''));
   host.innerHTML = orders.map(o =>
     '<div class="hist-row" style="grid-template-columns:130px 1fr 100px 120px;cursor:pointer;" data-ref="' + o.ref + '">' +
@@ -3787,12 +3790,14 @@ function openCommandeDetail(order){
   const isValidee = order.statut === 'validee';
   const canMarkReady = (order.statut === 'validee' || order.statut === 'payee') && !order.prete;
   const canArchive = (order.statut === 'payee' || order.statut === 'refusee') && !order.archivee;
+  const canCancel = (order.statut === 'en_attente' || order.statut === 'validee') && !order.archivee;
   document.getElementById('commandeAcceptBtn').style.display = isPending ? 'inline-block' : 'none';
   document.getElementById('commandeRefuseBtn').style.display = isPending ? 'inline-block' : 'none';
   document.getElementById('commandePaidBtn').style.display = isValidee ? 'inline-block' : 'none';
   document.getElementById('commandePretBtn').style.display = canMarkReady ? 'inline-block' : 'none';
   document.getElementById('commandeLivraisonBtn').style.display = peutMarquerEnLivraison(order) ? 'inline-block' : 'none';
   document.getElementById('commandeArchiveBtn').style.display = canArchive ? 'inline-block' : 'none';
+  document.getElementById('commandeCancelBtn').style.display = canCancel ? 'inline-block' : 'none';
   document.getElementById('commandeDetailModal').style.display = 'flex';
 }
 
@@ -3863,6 +3868,19 @@ async function markCommandeEnLivraison(){
   renderCommandesList();
 }
 document.getElementById('commandeLivraisonBtn').addEventListener('click', markCommandeEnLivraison);
+
+document.getElementById('commandeCancelBtn').addEventListener('click', async ()=>{
+  if(!currentDetailOrder || !db) return;
+  if(!confirm("Annuler cette commande ? Le client sera prévenu et la commande sera archivée.")) return;
+  const raison = prompt("Raison de l'annulation (optionnel) :") || '';
+  await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'annulee', archivee: true, raisonAnnulation: raison, annuleeTs: Date.now() });
+  currentDetailOrder.statut = 'annulee';
+  currentDetailOrder.archivee = true;
+  logAction('Commande annulée', currentDetailOrder.client + (raison ? ' — ' + raison : ''));
+  await notifyOrderUpdate(currentDetailOrder, "🚫 Votre commande a été **annulée**" + (raison ? ' — ' + raison : '') + ". Si vous en souhaitez toujours une, merci d'en refaire une nouvelle sur le site.");
+  document.getElementById('commandeDetailModal').style.display = 'none';
+  renderCommandesList();
+});
 
 document.getElementById('commandeArchiveBtn').addEventListener('click', async ()=>{
   if(!currentDetailOrder || !db) return;
