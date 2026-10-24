@@ -3811,6 +3811,7 @@ document.getElementById('commandeDetailClose').addEventListener('click', ()=>{
 
 document.getElementById('commandeAcceptBtn').addEventListener('click', async ()=>{
   if(!currentDetailOrder || !db) return;
+  if(!confirm("⚠️ Attention : as-tu bien vérifié les stocks avant de valider cette commande ?")) return;
   await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'validee' });
   currentDetailOrder.statut = 'validee';
   logAction('Commande validée', currentDetailOrder.client + ' — ' + formatMoneyPlain(currentDetailOrder.ttc));
@@ -3844,6 +3845,7 @@ document.getElementById('commandePaidBtn').addEventListener('click', async ()=>{
 
 async function markCommandePrete(){
   if(!currentDetailOrder || !db) return;
+  if(!confirm("⚠️ Attention : as-tu bien vérifié que la commande est prête avant de valider ?")) return;
   const mode = currentDetailOrder.modeLivraison || 'recuperation';
   await db.ref('commandes/' + currentDetailOrder.ref).update({ prete: true });
   currentDetailOrder.prete = true;
