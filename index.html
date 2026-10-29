@@ -1207,6 +1207,18 @@
   </section>
 </div>
 
+<div class="modal-backdrop" id="paymentPopupModal" style="display:none;z-index:1300;">
+  <section class="members-panel" style="max-width:560px;text-align:center;border-color:var(--gold);max-height:90vh;overflow:auto;">
+    <div style="font-size:48px;margin-bottom:10px;">✅</div>
+    <h2 style="color:var(--gold);">Commande validée !</h2>
+    <p id="paymentPopupText" style="font-size:15px;margin:14px 0 6px;"></p>
+    <div id="paymentPopupBox" style="text-align:left;"></div>
+    <div class="add-actions" style="justify-content:center;margin-top:16px;">
+      <button class="btn secondary" id="paymentPopupClose" type="button">Fermer</button>
+    </div>
+  </section>
+</div>
+
 <div id="savingIndicator" class="saving-indicator"></div>
 <div id="undoToast"></div>
 
@@ -3394,6 +3406,32 @@ const STATUT_BADGE = {
 let myOrdersCache = {};
 let myOrdersListenedRefs = new Set();
 
+function paiementPopupDejaVu(ref){
+  try{ return (JSON.parse(localStorage.getItem('umami_paiement_vu') || '[]')).indexOf(ref) >= 0; }catch(e){ return false; }
+}
+function marquerPaiementPopupVu(ref){
+  try{
+    const l = JSON.parse(localStorage.getItem('umami_paiement_vu') || '[]');
+    if(l.indexOf(ref) < 0){ l.push(ref); localStorage.setItem('umami_paiement_vu', JSON.stringify(l)); }
+  }catch(e){}
+}
+function showPaymentPopup(order){
+  if(order.paiementCash || order.preuvePaiement || paiementPopupDejaVu(order.ref)) return;
+  marquerPaiementPopupVu(order.ref);
+  document.getElementById('paymentPopupText').innerHTML =
+    "Ta commande <b>" + escapeHtml(order.ref) + "</b> est <b>validée</b> (" + formatMoneyPlain(order.ttc) + " TTC).<br>" +
+    "Choisis ton mode de paiement :<br>💳 <b>Virement</b> : envoie ta preuve ci-dessous<br>💵 <b>Sur place</b> : paiement direct en facture à la remise de la commande";
+  const box = document.getElementById('paymentPopupBox');
+  box.innerHTML = proofBoxHTML(order);
+  wireProofSubmit(box, () => order, () => { document.getElementById('paymentPopupModal').style.display = 'none'; renderMyOrders(); });
+  document.getElementById('paymentPopupModal').style.display = 'flex';
+  try{
+    if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
+      new Notification("Umami — Commande validée", { body: "Ta commande " + order.ref + " est validée : choisis ton mode de paiement." });
+    }
+  }catch(e){}
+}
+
 function peutMarquerEnLivraison(order){
   return !!order && order.modeLivraison === 'livraison' && !!order.prete && !order.enLivraison && order.statut !== 'refusee' && order.statut !== 'annulee';
 }
@@ -3434,6 +3472,9 @@ function attachMyOrderListener(ref){
       myOrdersCache[ref] = o;
       if(o.prete && o.statut !== 'annulee' && !o.disponibilite && (!previous || !previous.prete)){
         showReadyPopup(o);
+      }
+      if(o.statut === 'validee' && (!previous || previous.statut !== 'validee')){
+        showPaymentPopup(o);
       }
       if(o.enLivraison && previous && !previous.enLivraison){
         showDeliveryPopup(o);
@@ -3667,6 +3708,9 @@ async function downloadDevisPDF(el, refName){
   pdf.save((refName || 'facture-umami') + '.pdf');
 }
 
+document.getElementById('paymentPopupClose').addEventListener('click', ()=>{
+  document.getElementById('paymentPopupModal').style.display = 'none';
+});
 document.getElementById('deliveryPopupClose').addEventListener('click', ()=>{
   document.getElementById('deliveryPopupModal').style.display = 'none';
 });
@@ -3815,7 +3859,7 @@ document.getElementById('commandeAcceptBtn').addEventListener('click', async ()=
   await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'validee' });
   currentDetailOrder.statut = 'validee';
   logAction('Commande validée', currentDetailOrder.client + ' — ' + formatMoneyPlain(currentDetailOrder.ttc));
-  await notifyOrderUpdate(currentDetailOrder, '✅ Commande **validée** — ' + formatMoneyPlain(currentDetailOrder.ttc) + ' TTC. Merci de procéder au virement.');
+  await notifyOrderUpdate(currentDetailOrder, "✅ Commande **validée** — " + formatMoneyPlain(currentDetailOrder.ttc) + " TTC.\n**Choisissez votre mode de paiement :**\n💳 Paiement par **virement**\n💵 Paiement **sur place en facture directe**\nMerci d'indiquer votre choix sur le site (Suivre ma commande).");
   document.getElementById('commandeDetailModal').style.display = 'none';
   renderCommandesList();
 });
