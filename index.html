@@ -739,6 +739,103 @@
     h1, .brand-mark, .subtitle{ color:#000 !important; }
   }
 </style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style id="refonte">
+/* ===== Refonte Umami : palette tirée du logo (noir sumi, vermillon, crème washi) ===== */
+:root{
+  --ink:#0f0d0c; --paper:#f1e8d3; --panel:#181514; --panel-2:#221d1b; --line:#3b2a26;
+  --accent:#d62a1f; --accent-soft:#e9dec6; --gold:#e6d3a8; --ok:#6aa36a; --warn:#d9a03a;
+  --danger:#d62a1f; --text-muted:#a39787;
+  --f-display:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',Georgia,serif;
+  --f-body:'Zen Kaku Gothic New','Hiragino Kaku Gothic ProN','Helvetica Neue',Arial,sans-serif;
+}
+html[data-theme="light"]{
+  --ink:#f3ecdc; --paper:#16110f; --panel:#fffaf0; --panel-2:#f6efdf; --line:#dccfb4;
+  --accent:#c4241a; --accent-soft:#2b211c; --gold:#7c5f24; --ok:#3d6b3d; --warn:#a06d1f;
+  --text-muted:#74685a;
+}
+body{
+  font-family:var(--f-body);
+  background-image:repeating-radial-gradient(circle at 0 100%, transparent 0px, transparent 17px, rgba(214,42,31,0.035) 18px, rgba(214,42,31,0.035) 19px, transparent 20px);
+}
+body::before{display:none;}
+h1, .members-panel h2, .chart-box h3, .landing-card .lc-title, .stat-card .stat-num{font-family:var(--f-display);font-style:normal;}
+h1{font-weight:800;color:var(--paper);letter-spacing:0;}
+h1 em{color:var(--accent);}
+.brand-mark{font-family:var(--f-body);font-size:14px;letter-spacing:0.02em;text-transform:none;font-weight:700;color:var(--accent);}
+.subtitle,.stamp,.hint,.result-count,footer{font-family:var(--f-body);}
+.stamp{text-transform:none;letter-spacing:0.02em;}
+header.top{background:var(--panel);border-top:4px solid var(--accent);border-bottom:1px solid var(--line);}
+nav.tabs button{font-family:var(--f-body);font-size:14px;font-weight:700;letter-spacing:0;text-transform:none;}
+nav.tabs button.active{color:var(--paper);}
+.btn{font-family:var(--f-body);font-size:14px;font-weight:700;letter-spacing:0;text-transform:none;border-radius:3px;padding:12px 20px;}
+.btn:hover{background:#ae1f16;}
+.btn.secondary{border-radius:3px;}
+.btn.secondary:hover{border-color:var(--accent);color:var(--paper);}
+.field label,.auth-box .field label,.add-member-grid .field label{font-family:var(--f-body);font-size:13px;font-weight:700;letter-spacing:0;text-transform:none;color:var(--accent-soft);}
+.field input,.field select,.field textarea,.auth-box select,.auth-box input{font-family:var(--f-body);font-size:14px;border-radius:3px;color:var(--paper);}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(214,42,31,0.25);}
+.session-bar{font-family:var(--f-body);font-size:13px;}
+.session-bar button{font-family:var(--f-body);font-size:13px;font-weight:700;letter-spacing:0;text-transform:none;border-radius:3px;padding:8px 14px;}
+.session-bar button:hover{border-color:var(--accent);color:var(--paper);}
+.members-panel{border-radius:4px;border-top:3px solid var(--accent);}
+.members-panel h2{font-weight:800;font-size:22px;color:var(--paper);}
+.chart-box h3{color:var(--paper);}
+.stat-card .stat-num{color:var(--paper);}
+.corner-logo{border-radius:50%;}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+th,.stat-card .stat-label{font-family:var(--f-body);text-transform:none;letter-spacing:0;font-size:13px;font-weight:700;}
+
+/* ----- Page d'accueil ----- */
+#landingScreen{overflow-y:auto;overflow-x:hidden;justify-content:flex-start;align-items:center;background:var(--ink);}
+.landing-bg{display:none;}
+#landingScreen::before{background:radial-gradient(ellipse 60% 70% at 78% 50%, rgba(214,42,31,0.30), transparent 70%),radial-gradient(ellipse at 0% 100%, rgba(241,232,211,0.05), transparent 55%);}
+.landing-dragon{position:absolute;right:3vw;top:50%;width:min(52vw,700px);height:auto;z-index:1;filter:drop-shadow(0 24px 50px rgba(0,0,0,0.65));transform:translateY(-50%);animation:dragon-in 1.2s cubic-bezier(.2,.7,.2,1) both;}
+@keyframes dragon-in{from{opacity:0;transform:translateY(-46%) rotate(-7deg) scale(.94);}to{opacity:1;transform:translateY(-50%) rotate(0) scale(1);}}
+.landing-kanji{position:absolute;left:clamp(14px,3.5vw,56px);top:50%;transform:translateY(-50%);margin:0;writing-mode:vertical-rl;font-family:var(--f-display);font-weight:800;font-size:clamp(44px,7vw,96px);letter-spacing:0.12em;color:var(--accent);z-index:2;user-select:none;}
+.landing-inner{position:relative;z-index:2;text-align:left;margin:auto 0;padding:40px 24px 40px clamp(28px,8vw,140px);max-width:none;width:min(100%,620px);}
+.landing-eyebrow{font-family:var(--f-body);font-size:15px;font-weight:700;letter-spacing:0.02em;text-transform:none;color:var(--accent);margin:0 0 6px;}
+.landing-title{font-family:var(--f-display);font-weight:800;font-size:clamp(64px,11vw,132px);letter-spacing:0.02em;line-height:.95;color:#f7efe1;text-shadow:none;}
+.landing-sub{font-family:var(--f-body);font-size:16px;color:var(--accent-soft);margin:18px 0 34px;max-width:30em;line-height:1.55;}
+.landing-choices{flex-direction:column;align-items:stretch;justify-content:flex-start;gap:12px;max-width:440px;}
+.landing-card{width:100%;background:rgba(241,232,211,0.05);backdrop-filter:blur(4px);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:2px;padding:18px 22px;gap:4px;}
+.landing-card:hover{transform:translateX(6px);border-color:var(--accent);background:rgba(214,42,31,0.16);}
+.landing-card .lc-title{font-weight:800;font-size:22px;color:#f7efe1;}
+.landing-card .lc-desc{font-family:var(--f-body);font-size:13.5px;color:var(--accent-soft);}
+.staff-link{font-family:var(--f-body);font-size:13px;margin-top:26px;}
+#cmdSpaceChoice .landing-choices{flex-direction:row;flex-wrap:wrap;justify-content:center;max-width:none;}
+#cmdSpaceChoice .landing-card{width:280px;}
+#cmdSpaceChoice h2{font-family:var(--f-display)!important;font-style:normal!important;font-weight:800!important;color:var(--paper)!important;}
+@media (max-width:860px){
+  #landingScreen{align-items:flex-start;}
+  .landing-dragon{right:auto;left:50%;top:18px;width:min(66vw,320px);transform:translateX(-50%);animation:dragon-in-m 1.1s cubic-bezier(.2,.7,.2,1) both;}
+  @keyframes dragon-in-m{from{opacity:0;transform:translateX(-50%) rotate(-7deg) scale(.94);}to{opacity:1;transform:translateX(-50%);}}
+  .landing-kanji{display:none;}
+  .landing-inner{width:100%;margin:0;padding:calc(min(66vw,320px) + 40px) 22px 48px;}
+  .landing-choices{max-width:none;}
+}
+@media (prefers-reduced-motion:reduce){.landing-dragon{animation:none;}}
+
+/* ----- Choix retrait / livraison ----- */
+.mode-choice{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.mode-tile{position:relative;display:flex;align-items:center;gap:16px;text-align:left;padding:22px;background:var(--panel-2);border:2px solid var(--line);border-radius:4px;color:var(--accent-soft);cursor:pointer;font-family:var(--f-body);transition:border-color .15s ease,background .15s ease,transform .15s ease;}
+.mode-tile svg{width:46px;height:46px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;}
+.mode-tile .mt-title{display:block;font-family:var(--f-display);font-weight:800;font-size:20px;color:var(--paper);line-height:1.2;}
+.mode-tile .mt-desc{display:block;font-size:13.5px;color:var(--text-muted);margin-top:3px;}
+.mode-tile:hover{border-color:var(--accent);transform:translateY(-2px);}
+.mode-tile.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+.mode-tile.on .mt-title,.mode-tile.on .mt-desc{color:#fff;}
+.mode-tile .seal{display:none;position:absolute;top:-11px;right:-9px;width:32px;height:32px;place-items:center;background:#f1e8d3;color:var(--accent);border:2px solid var(--accent);font-family:var(--f-display);font-weight:800;font-size:18px;transform:rotate(6deg);}
+.mode-tile.on .seal{display:grid;}
+.mode-choice.missing .mode-tile{border-color:var(--accent);border-style:dashed;animation:mode-nudge .5s ease 2;}
+@keyframes mode-nudge{0%,100%{transform:translateX(0);}25%{transform:translateX(-5px);}75%{transform:translateX(5px);}}
+.mode-error{display:none;color:var(--accent);font-weight:700;font-size:14px;margin:10px 0 0;}
+.mode-choice.missing + .mode-error{display:block;}
+@media (max-width:560px){.mode-choice{grid-template-columns:1fr;}}
+@media (prefers-reduced-motion:reduce){.mode-choice.missing .mode-tile{animation:none;}.mode-tile:hover{transform:none;}}
+</style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -749,6 +846,7 @@
 
 <div id="landingScreen">
   <div class="landing-bg"></div>
+  <img class="header-logo-small landing-dragon" src="" alt="Logo Umami Restaurant">
   <div class="landing-inner">
     <p class="landing-eyebrow">Umami Marina</p>
     <h1 class="landing-title">UMAMI</h1>
@@ -1332,10 +1430,24 @@
             <option value="Cayo">Cayo</option>
           </select>
         </div>
-        <div class="field">
-          <label>Retrait ou livraison</label>
-          <select id="cmd-livraison">
-            <option value="recuperation" selected>Je viens récupérer</option>
+        <div class="field wide" id="cmd-livraison-field">
+          <label>Comment veux-tu avoir ta commande ?</label>
+          <div class="mode-choice" id="cmdModeChoice" role="radiogroup" aria-label="Retrait ou livraison">
+            <button type="button" class="mode-tile" data-mode="recuperation" role="radio" aria-checked="false">
+              <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 18h28l-2 22H12z"/><path d="M17 18v-4a7 7 0 0 1 14 0v4"/></svg>
+              <span><span class="mt-title">Je viens récupérer</span><span class="mt-desc">Récupération sur place</span></span>
+              <span class="seal" aria-hidden="true">選</span>
+            </button>
+            <button type="button" class="mode-tile" data-mode="livraison" role="radio" aria-checked="false">
+              <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M5 12h25v22H5z"/><path d="M30 20h9l5 7v7H30z"/><circle cx="15" cy="36" r="4"/><circle cx="37" cy="36" r="4"/></svg>
+              <span><span class="mt-title">Je souhaite être livré</span><span class="mt-desc">On t'apporte la commande</span></span>
+              <span class="seal" aria-hidden="true">選</span>
+            </button>
+          </div>
+          <p class="mode-error" id="cmdModeError">Choisis comment tu veux avoir ta commande : la récupérer ou être livré.</p>
+          <select id="cmd-livraison" hidden aria-hidden="true">
+            <option value="" selected></option>
+            <option value="recuperation">Je viens récupérer</option>
             <option value="livraison">Je souhaite être livré</option>
           </select>
         </div>
@@ -3296,6 +3408,12 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
   errEl.textContent = '';
   const lignes = cmdSelectedLines();
   if(!client){ errEl.textContent = 'Le nom (entreprise/famille/groupe) est requis.'; return; }
+  if(!modeLivraison){
+    document.getElementById('cmdModeChoice').classList.add('missing');
+    errEl.textContent = "Choisis d'abord : récupérer ou être livré.";
+    document.getElementById('cmd-livraison-field').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
   if(lignes.length === 0){ errEl.textContent = 'Sélectionne au moins un article.'; return; }
 
   if(!clientRegistries[cmdSpaceType].loaded) await loadClientRegistry(cmdSpaceType);
@@ -3372,8 +3490,28 @@ function startLiveDevisView(refKey){
 }
 
 document.getElementById('cmdPrintDevis').addEventListener('click', ()=> window.print());
+function syncModeTiles(){
+  const sel = document.getElementById('cmd-livraison');
+  document.querySelectorAll('.mode-tile').forEach(t=>{
+    const on = t.getAttribute('data-mode') === sel.value;
+    t.classList.toggle('on', on);
+    t.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
+  if(sel.value) document.getElementById('cmdModeChoice').classList.remove('missing');
+}
+document.querySelectorAll('.mode-tile').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.getElementById('cmd-livraison').value = t.getAttribute('data-mode');
+    syncModeTiles();
+    const e = document.getElementById('cmd-error');
+    if(e) e.textContent = '';
+  });
+});
+
 document.getElementById('cmdNewOrder').addEventListener('click', ()=>{
   cmdQuantities = {};
+  document.getElementById('cmd-livraison').value = '';
+  syncModeTiles();
   if(liveDevisRef){ db.ref('commandes/' + liveDevisRef).off('value'); liveDevisRef = null; }
   document.getElementById('cmdDevisPanel').style.display = 'none';
   document.getElementById('cmdFormPanel').style.display = 'block';
