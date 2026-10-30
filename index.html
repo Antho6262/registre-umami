@@ -897,6 +897,42 @@ html[data-theme="light"] .members-panel{border-color:#16110f;}
 .chart-box,.stat-card{border-radius:0;}
 nav.tabs button.active{border-bottom-width:3px;}
 </style>
+<style id="refonte3">
+/* ===== Refonte 3 : dégradé long et doux, suivi en étapes, transitions ===== */
+.landing-sun{background:radial-gradient(circle at 30% 24%,#a8392b 0,#8a2a1f 30%,#5f1d16 58%,#3a120e 82%,#1d0907 100%);box-shadow:0 0 150px rgba(138,42,31,.28);}
+header.top{background:linear-gradient(115deg,#241210 0%,#4d1c16 22%,#7a2a20 48%,#9b3a2c 72%,#7a2a20 100%);}
+.btn{background:#a82f22;box-shadow:0 3px 0 #5f1d16;}
+.btn:hover{background:#8f271c;}
+.btn:active{box-shadow:0 0 0 #5f1d16;}
+.landing-card,.mode-tile.on{--accent:#a82f22;}
+.mode-tile.on{background:#a82f22;}
+
+/* suivi de commande */
+.track{list-style:none;display:flex;margin:16px 0 8px;padding:0;counter-reset:none;}
+.track li{position:relative;flex:1 1 0;display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;font-size:12.5px;line-height:1.25;color:var(--text-muted);padding:0 2px;}
+.track li::before{content:"";position:absolute;top:15px;right:50%;width:100%;height:3px;background:var(--line);z-index:0;}
+.track li:first-child::before{display:none;}
+.track .dot{position:relative;z-index:1;width:32px;height:32px;display:grid;place-items:center;border-radius:50%;background:var(--panel-2);border:3px solid var(--line);font-weight:800;font-size:14px;color:transparent;transition:background .3s ease,border-color .3s ease;}
+.track li.done{color:var(--paper);}
+.track li.done::before{background:#a82f22;}
+.track li.done .dot{background:#a82f22;border-color:#a82f22;color:#fbf4e4;}
+.track li.current{color:var(--paper);font-weight:700;}
+.track li.current .dot{border-color:#e9dec6;animation:track-pulse 1.8s ease-in-out infinite;}
+@keyframes track-pulse{0%,100%{box-shadow:0 0 0 0 rgba(233,222,198,.55);}60%{box-shadow:0 0 0 9px rgba(233,222,198,0);}}
+.track-stop{margin:14px 0 6px;padding:10px 14px;border:2px solid #a82f22;font-weight:700;color:var(--paper);}
+@media print{.track,.track-stop{display:none;}}
+@media (max-width:420px){.track li{font-size:11px;}.track .dot{width:28px;height:28px;}.track li::before{top:13px;}}
+
+/* bouton recommander */
+.reorder-note{margin:0 0 14px;padding:10px 14px;border:2px dashed #a82f22;color:var(--paper);font-weight:700;display:none;}
+
+/* transitions : le papier se déroule */
+@keyframes unroll{from{opacity:0;clip-path:inset(0 0 100% 0);transform:translateY(-10px);}to{opacity:1;clip-path:inset(0 0 -40px 0);transform:none;}}
+@keyframes pop-in{from{opacity:0;transform:translateY(14px) scale(.97);}to{opacity:1;transform:none;}}
+#cmdSpaceChoice,#cmdFormPanel,#cmdDevisPanel,#cmdTrackPanel,#commandeMain,#inventaireMain,#appMain,#directionMain{animation:unroll .5s cubic-bezier(.2,.7,.2,1) both;}
+.modal-backdrop .members-panel{animation:pop-in .28s cubic-bezier(.2,.8,.2,1) both;}
+@media (prefers-reduced-motion:reduce){#cmdSpaceChoice,#cmdFormPanel,#cmdDevisPanel,#cmdTrackPanel,#commandeMain,#inventaireMain,#appMain,#directionMain,.modal-backdrop .members-panel,.track li.current .dot{animation:none;}}
+</style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -1473,6 +1509,7 @@ nav.tabs button.active{border-bottom-width:3px;}
     </div>
 
     <div id="cmdFormPanel" style="display:none;">
+      <p class="reorder-note" id="cmdReorderNote"></p>
       <div class="add-grid">
         <div class="field wide">
           <label>Entreprise / famille / groupe</label>
@@ -3546,7 +3583,7 @@ function startLiveDevisView(refKey){
     if(!order) return;
     const docType = (order.statut === 'validee' || order.statut === 'payee') ? 'FACTURE' : 'DEVIS';
     const host = document.getElementById('cmdDevisContent');
-    host.innerHTML = generateDevisHTML(order, docType) + proofBoxHTML(order) + dispoBoxHTML(order);
+    host.innerHTML = orderTrackerHTML(order) + generateDevisHTML(order, docType) + proofBoxHTML(order) + dispoBoxHTML(order);
     wireProofSubmit(host, () => order, () => startLiveDevisView(refKey));
     wireDispoSubmit(host, () => order, () => startLiveDevisView(refKey));
   });
@@ -3573,6 +3610,7 @@ document.querySelectorAll('.mode-tile').forEach(t=>{
 
 document.getElementById('cmdNewOrder').addEventListener('click', ()=>{
   cmdQuantities = {};
+  document.getElementById('cmdReorderNote').style.display = 'none';
   document.getElementById('cmd-livraison').value = '';
   syncModeTiles();
   if(liveDevisRef){ db.ref('commandes/' + liveDevisRef).off('value'); liveDevisRef = null; }
@@ -3834,6 +3872,63 @@ function wireProofSubmit(container, getOrder, onDone){
   });
 }
 
+function orderTrackerHTML(o){
+  if(o.statut === 'annulee') return '<p class="track-stop">🚫 Commande annulée</p>';
+  if(o.statut === 'refusee') return '<p class="track-stop">❌ Commande refusée</p>';
+  const livraison = o.modeLivraison === 'livraison';
+  const steps = [
+    { label: 'Reçue', done: true },
+    { label: 'Validée', done: o.statut === 'validee' || o.statut === 'payee' },
+    { label: 'Payée', done: o.statut === 'payee' },
+    { label: 'Prête', done: !!o.prete }
+  ];
+  if(livraison) steps.push({ label: 'En livraison', done: !!o.enLivraison });
+  let currentSet = false;
+  return '<ol class="track" aria-label="Suivi de la commande">' + steps.map(st => {
+    let cls = '';
+    if(st.done) cls = 'done';
+    else if(!currentSet){ cls = 'current'; currentSet = true; }
+    return '<li class="' + cls + '"><span class="dot">✓</span><span>' + st.label + '</span></li>';
+  }).join('') + '</ol>';
+}
+
+async function recommanderCommande(order){
+  const espace = order.espace === 'famille' ? 'famille' : 'entreprise';
+  if(!clientRegistries[espace].loaded) await loadClientRegistry(espace);
+  cmdSpaceType = espace;
+  cmdQuantities = {};
+  let manquants = 0;
+  (order.lignes || []).forEach(l => {
+    if(ORDER_CATALOG.some(it => it.nom === l.nom) && cmdCategories().indexOf(ORDER_CATALOG.find(it => it.nom === l.nom).cat) >= 0){
+      cmdQuantities[l.nom] = l.qte;
+    }else{
+      manquants++;
+    }
+  });
+  document.getElementById('cmdSpaceChoice').style.display = 'none';
+  document.getElementById('cmdTrackPanel').style.display = 'none';
+  document.getElementById('cmdDevisPanel').style.display = 'none';
+  document.getElementById('cmdFormPanel').style.display = 'block';
+  cmdActiveCat = cmdCategories().find(c => Object.keys(cmdQuantities).some(n => ORDER_CATALOG.find(it => it.nom === n).cat === c)) || cmdCategories()[0] || null;
+  renderCmdCatTabs();
+  renderCmdCatalog();
+  renderCmdSummary();
+  populateClientSelect();
+  const sel = document.getElementById('cmd-client-select');
+  sel.value = Array.from(sel.options).some(o => o.value === order.client) ? order.client : '';
+  sel.dispatchEvent(new Event('change'));
+  if(!sel.value) document.getElementById('cmd-client').value = order.client || '';
+  document.getElementById('cmd-tel').value = order.tel || '';
+  if(order.zone) document.getElementById('cmd-zone').value = order.zone;
+  if(order.clientWebhook && !sel.value) document.getElementById('cmd-contact').value = order.clientWebhook;
+  document.getElementById('cmd-livraison').value = order.modeLivraison || '';
+  syncModeTiles();
+  const note = document.getElementById('cmdReorderNote');
+  note.textContent = 'Commande ' + order.ref + ' reprise. Vérifie les quantités puis envoie.' + (manquants ? ' ' + manquants + ' article(s) ne sont plus disponibles et ont été retirés.' : '');
+  note.style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 function renderMyOrdersFromCache(){
   const host = document.getElementById('cmdMyOrdersList');
   const orders = Object.values(myOrdersCache);
@@ -3847,9 +3942,11 @@ function renderMyOrdersFromCache(){
       '<div style="display:flex;justify-content:space-between;align-items:center;">' +
       '<b>' + escapeHtml(o.client) + '</b> <span class="hint">' + escapeHtml(o.ref) + '</span>' +
       '</div>' +
+      orderTrackerHTML(o) +
       '<p>' + (STATUT_BADGE[o.statut] || o.statut) + (etatPreteClient(o) ? ', <span style="color:var(--gold);font-weight:bold;">' + etatPreteClient(o) + '</span>' : '') + '</p>' +
       '<div class="add-actions" style="justify-content:flex-start;">' +
       '<button class="btn secondary view-order" data-ref="' + o.ref + '" type="button">Voir le document</button>' +
+      '<button class="btn secondary reorder-order" data-ref="' + o.ref + '" type="button">Recommander</button>' +
       '</div>' +
       '<div class="order-doc" data-ref="' + o.ref + '" style="display:none;margin-top:10px;"></div>' +
       proofBoxHTML(o) +
@@ -3870,6 +3967,13 @@ function renderMyOrdersFromCache(){
           '<div class="add-actions"><button class="btn secondary dl-order" data-ref="' + ref + '" type="button">Télécharger PDF</button></div>';
         docHost.querySelector('.dl-order').addEventListener('click', ()=> downloadDevisPDF(docHost.querySelector('div'), ref));
       }
+    });
+  });
+
+  host.querySelectorAll('.reorder-order').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const order = orders.find(o=>o.ref===btn.getAttribute('data-ref'));
+      if(order) recommanderCommande(order);
     });
   });
 
