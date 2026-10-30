@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Umami | Registre du personnel</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#7a2a20">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Umami">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
   :root{
     --ink:#161311;
@@ -933,6 +940,32 @@ header.top{background:linear-gradient(115deg,#241210 0%,#4d1c16 22%,#7a2a20 48%,
 .modal-backdrop .members-panel{animation:pop-in .28s cubic-bezier(.2,.8,.2,1) both;}
 @media (prefers-reduced-motion:reduce){#cmdSpaceChoice,#cmdFormPanel,#cmdDevisPanel,#cmdTrackPanel,#commandeMain,#inventaireMain,#appMain,#directionMain,.modal-backdrop .members-panel,.track li.current .dot{animation:none;}}
 </style>
+<style id="refonte4">
+/* ===== Favoris, avis, notes, fiches ===== */
+.fav-btn{background:none;border:none;cursor:pointer;font-size:20px;line-height:1;color:var(--text-muted);padding:0 8px 0 0;vertical-align:middle;}
+.fav-btn.on{color:#c0392b;}
+.fav-btn:hover{color:#e0594a;}
+.habits{margin:6px 0 22px;padding:14px 16px 6px;border:2px solid var(--line);border-left:5px solid #a82f22;background:var(--panel);}
+.habits h3{font-family:var(--f-display);font-weight:800;font-size:20px;margin:0 0 6px;color:var(--paper);}
+.habits table{margin:0;}
+.star-row{display:flex;gap:4px;margin:8px 0;}
+.star-btn{background:none;border:none;cursor:pointer;font-size:34px;line-height:1;color:var(--line);padding:0 2px;transition:transform .1s ease,color .1s ease;}
+.star-btn.on{color:#e0a82e;}
+.star-btn:hover{transform:scale(1.15);}
+.avis-box{margin-top:14px;padding:14px 16px;border:2px dashed #a82f22;}
+.avis-box textarea{width:100%;min-height:64px;background:var(--panel-2);border:1px solid var(--line);color:var(--paper);font-family:var(--f-body);font-size:14px;padding:10px;border-radius:3px;}
+.notes-box{margin-top:14px;padding:12px 14px;border:2px solid var(--line);}
+.notes-box h4{margin:0 0 8px;font-family:var(--f-display);font-size:16px;color:var(--paper);}
+.note-item{padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px;}
+.note-item small{color:var(--text-muted);display:block;}
+.notes-box textarea{width:100%;min-height:56px;margin-top:8px;background:var(--panel-2);border:1px solid var(--line);color:var(--paper);font-family:var(--f-body);font-size:14px;padding:10px;border-radius:3px;}
+.fiche-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0;}
+.fiche-stats div{padding:12px;border:2px solid var(--line);}
+.fiche-stats b{display:block;font-family:var(--f-display);font-size:22px;color:var(--paper);}
+.fiche-row{display:grid;grid-template-columns:90px 1fr 100px 110px;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px;cursor:pointer;}
+.fiche-row:hover{background:var(--panel-2);}
+@media (max-width:560px){.fiche-row{grid-template-columns:1fr 1fr;}}
+</style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -1416,6 +1449,16 @@ header.top{background:linear-gradient(115deg,#241210 0%,#4d1c16 22%,#7a2a20 48%,
   </section>
 </div>
 
+<div class="modal-backdrop" id="clientFicheModal" style="display:none;z-index:1250;">
+  <section class="members-panel" style="max-width:760px;max-height:90vh;overflow:auto;">
+    <div id="clientFicheContent"></div>
+    <div class="add-actions" style="margin-top:14px;">
+      <button class="btn secondary" id="clientFicheBack" type="button" style="display:none;">Tous les clients</button>
+      <button class="btn secondary" id="clientFicheClose" type="button">Fermer</button>
+    </div>
+  </section>
+</div>
+
 <div id="savingIndicator" class="saving-indicator"></div>
 <div id="undoToast"></div>
 
@@ -1423,12 +1466,20 @@ header.top{background:linear-gradient(115deg,#241210 0%,#4d1c16 22%,#7a2a20 48%,
   <section class="members-panel" style="max-width:640px;">
     <h2>Détail de la commande</h2>
     <div id="commandeDetailContent"></div>
+    <div class="notes-box">
+      <h4>Notes internes (visibles seulement par le staff)</h4>
+      <div id="commandeNotesList"></div>
+      <textarea id="commandeNoteInput" placeholder="Ajouter une note pour l'équipe"></textarea>
+      <div class="add-actions" style="margin-top:8px;"><button class="btn secondary" id="commandeNoteAdd" type="button">Enregistrer la note</button></div>
+    </div>
     <div class="add-actions">
       <button class="btn secondary" id="commandeDetailClose" type="button">Fermer</button>
       <button class="btn secondary" id="commandeRefuseBtn" type="button" style="border-color:var(--accent);color:var(--accent);">Refuser</button>
       <button class="btn secondary" id="commandePaidBtn" type="button" style="border-color:var(--ok);color:var(--ok);display:none;">Marquer payée</button>
       <button class="btn secondary" id="commandePretBtn" type="button" style="border-color:var(--gold);color:var(--gold);display:none;">Commande prête</button>
       <button class="btn secondary" id="commandeLivraisonBtn" type="button" style="border-color:var(--gold);color:var(--gold);display:none;">🚚 En cours de livraison</button>
+      <button class="btn secondary" id="commandeRemiseBtn" type="button" style="border-color:var(--ok);color:var(--ok);display:none;">✅ Remise au client</button>
+      <button class="btn secondary" id="commandeFicheBtn" type="button">Fiche du client</button>
       <button class="btn secondary" id="commandeCancelBtn" type="button" style="border-color:var(--accent);color:var(--accent);display:none;">🚫 Annuler la commande</button>
       <button class="btn secondary" id="commandeArchiveBtn" type="button" style="border-color:var(--text-muted);color:var(--text-muted);display:none;">Archiver</button>
       <button class="btn" id="commandeAcceptBtn" type="button">Accepter</button>
@@ -1465,6 +1516,7 @@ header.top{background:linear-gradient(115deg,#241210 0%,#4d1c16 22%,#7a2a20 48%,
 
     <div class="toolbar">
       <button class="btn secondary" id="toggleArchivedBtn">Voir les archives</button>
+      <button class="btn secondary" id="clientsListBtn">Fiches clients</button>
     </div>
     <p class="result-count" id="commandesResultCount"></p>
     <div id="commandesList" class="hist-list"></div>
@@ -1556,6 +1608,7 @@ header.top{background:linear-gradient(115deg,#241210 0%,#4d1c16 22%,#7a2a20 48%,
         <div class="field wide" id="cmd-mention-field"><label>Mention à pinguer sur ce webhook (optionnel)</label><input type="text" id="cmd-mention" placeholder="Ex. <@ID> (personne) ou <@&ID> (rôle)"></div>
       </div>
 
+      <div id="cmdHabitsHost"></div>
       <nav class="tabs" id="cmdCatTabs"></nav>
       <div id="cmdCatalogHost"></div>
 
@@ -3035,6 +3088,12 @@ try{
   document.body.appendChild(corner);
 }catch(e){}
 
+try{
+  if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+}catch(e){}
+
 /* ---- Badge alerte stock bas sur la carte Inventaire (avant connexion) ---- */
 (async function checkLowStockBadge(){
   if(!db) return;
@@ -3340,26 +3399,87 @@ function renderCmdCatTabs(){
   });
 }
 
+function getFavs(){
+  try{ return JSON.parse(localStorage.getItem('umami_favoris') || '[]'); }catch(e){ return []; }
+}
+function toggleFav(nom){
+  const f = getFavs();
+  const i = f.indexOf(nom);
+  if(i >= 0) f.splice(i, 1); else f.push(nom);
+  try{ localStorage.setItem('umami_favoris', JSON.stringify(f)); }catch(e){}
+}
+function getHabitCounts(){
+  try{ return JSON.parse(localStorage.getItem('umami_habitudes') || '{}'); }catch(e){ return {}; }
+}
+function bumpHabitudes(lignes){
+  const c = getHabitCounts();
+  (lignes || []).forEach(l => { c[l.nom] = (c[l.nom] || 0) + 1; });
+  try{ localStorage.setItem('umami_habitudes', JSON.stringify(c)); }catch(e){}
+}
+function habitNames(){
+  const cats = cmdCategories();
+  const counts = getHabitCounts();
+  const names = new Set(getFavs());
+  Object.keys(counts).forEach(n => { if(counts[n] >= 2) names.add(n); });
+  return Array.from(names)
+    .map(n => ORDER_CATALOG.find(it => it.nom === n))
+    .filter(it => it && cats.indexOf(it.cat) >= 0)
+    .sort((a,b) => (counts[b.nom] || 0) - (counts[a.nom] || 0));
+}
+function bindQtyInputs(host){
+  host.querySelectorAll('.cmd-qty').forEach(input=>{
+    input.addEventListener('input', ()=>{
+      const nom = input.getAttribute('data-nom');
+      const val = parseInt(input.value, 10) || 0;
+      if(val > 0) cmdQuantities[nom] = val; else delete cmdQuantities[nom];
+      document.querySelectorAll('.cmd-qty').forEach(o => { if(o !== input && o.getAttribute('data-nom') === nom) o.value = val; });
+      renderCmdSummary();
+    });
+  });
+  host.querySelectorAll('.fav-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      toggleFav(btn.getAttribute('data-fav'));
+      renderCmdCatalog();
+    });
+  });
+}
+function renderCmdHabits(){
+  const host = document.getElementById('cmdHabitsHost');
+  if(!host) return;
+  const items = habitNames();
+  const favs = getFavs();
+  let html = '<div class="habits"><h3>Mes habitudes</h3>';
+  if(items.length === 0){
+    html += '<p class="hint">Touche le ♡ à côté d\'un article pour le retrouver ici. Les articles que tu commandes souvent s\'ajoutent aussi tout seuls.</p>';
+  }else{
+    html += '<table><tbody>';
+    items.forEach(it=>{
+      html += '<tr><td class="nom"><button type="button" class="fav-btn' + (favs.indexOf(it.nom) >= 0 ? ' on' : '') + '" data-fav="' + escapeHtml(it.nom) + '" aria-label="Favori">' + (favs.indexOf(it.nom) >= 0 ? '♥' : '♡') + '</button>' + escapeHtml(it.nom) + '</td>' +
+        '<td>' + formatMoneyPlain(it.prix) + '</td>' +
+        '<td><input type="number" min="0" class="inv-edit cmd-qty" data-nom="' + escapeHtml(it.nom) + '" value="' + (cmdQuantities[it.nom] || 0) + '"></td></tr>';
+    });
+    html += '</tbody></table>';
+  }
+  html += '</div>';
+  host.innerHTML = html;
+  bindQtyInputs(host);
+}
+
 function renderCmdCatalog(){
   const host = document.getElementById('cmdCatalogHost');
   const items = ORDER_CATALOG.filter(it => it.cat === cmdActiveCat);
   let html = '<table><thead><tr><th>Article</th><th>Prix unitaire</th><th>Quantité</th></tr></thead><tbody>';
   items.forEach(it=>{
     const qty = cmdQuantities[it.nom] || 0;
-    html += '<tr><td class="nom">' + escapeHtml(it.nom) + '</td>' +
+    const isFav = getFavs().indexOf(it.nom) >= 0;
+    html += '<tr><td class="nom"><button type="button" class="fav-btn' + (isFav ? ' on' : '') + '" data-fav="' + escapeHtml(it.nom) + '" aria-label="Favori">' + (isFav ? '♥' : '♡') + '</button>' + escapeHtml(it.nom) + '</td>' +
       '<td>' + formatMoneyPlain(it.prix) + '</td>' +
       '<td><input type="number" min="0" class="inv-edit cmd-qty" data-nom="' + escapeHtml(it.nom) + '" value="' + qty + '"></td></tr>';
   });
   html += '</tbody></table>';
   host.innerHTML = html;
-  host.querySelectorAll('.cmd-qty').forEach(input=>{
-    input.addEventListener('input', ()=>{
-      const nom = input.getAttribute('data-nom');
-      const val = parseInt(input.value, 10) || 0;
-      if(val > 0) cmdQuantities[nom] = val; else delete cmdQuantities[nom];
-      renderCmdSummary();
-    });
-  });
+  bindQtyInputs(host);
+  renderCmdHabits();
 }
 
 function cmdSelectedLines(){
@@ -3560,6 +3680,7 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
     await db.ref('commandes/' + refKey).set(order);
     rememberMyOrder(refKey);
     attachMyOrderListener(refKey);
+    bumpHabitudes(lignes);
     try{ localStorage.setItem('umami_client_info', JSON.stringify({ client, tel, clientWebhook })); }catch(e){}
     await notifyClientWebhook(order, "📥 Votre commande a bien été envoyée et sera traitée d'ici peu. Référence : " + refKey);
     hideSaving();
@@ -3669,6 +3790,11 @@ function showPaymentPopup(order){
       new Notification("Umami : Commande validée", { body: "Ta commande " + order.ref + " est validée : choisis ton mode de paiement." });
     }
   }catch(e){}
+}
+
+function peutMarquerRemise(order){
+  return !!order && !!order.prete && !order.remise && order.statut !== 'refusee' && order.statut !== 'annulee' &&
+    (order.modeLivraison !== 'livraison' || !!order.enLivraison);
 }
 
 function peutMarquerEnLivraison(order){
@@ -3929,6 +4055,56 @@ async function recommanderCommande(order){
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+function avisBoxHTML(o){
+  if(!o.remise) return '';
+  if(o.avis){
+    return '<div class="avis-box"><b>Merci pour ton avis !</b><br>' + '★'.repeat(o.avis.note) + '☆'.repeat(5 - o.avis.note) + ' ' + o.avis.note + '/5' +
+      (o.avis.commentaire ? '<br><span class="hint">' + escapeHtml(o.avis.commentaire) + '</span>' : '') + '</div>';
+  }
+  return '<div class="avis-box" data-ref="' + o.ref + '"><b>Comment s\'est passée ta commande ?</b>' +
+    '<div class="star-row" data-ref="' + o.ref + '" data-note="0">' +
+    [1,2,3,4,5].map(n => '<button type="button" class="star-btn" data-n="' + n + '" aria-label="' + n + ' sur 5">★</button>').join('') +
+    '</div>' +
+    '<textarea class="avis-text" data-ref="' + o.ref + '" placeholder="Un petit commentaire pour l\'équipe (optionnel)"></textarea>' +
+    '<div class="add-actions" style="margin-top:8px;"><button type="button" class="btn avis-submit" data-ref="' + o.ref + '">Envoyer mon avis</button></div>' +
+    '<p class="hint avis-status" data-ref="' + o.ref + '"></p></div>';
+}
+
+function wireAvis(container, getOrder){
+  container.querySelectorAll('.star-row').forEach(row=>{
+    row.querySelectorAll('.star-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const n = parseInt(btn.getAttribute('data-n'), 10);
+        row.setAttribute('data-note', String(n));
+        row.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('on', parseInt(b.getAttribute('data-n'), 10) <= n));
+      });
+    });
+  });
+  container.querySelectorAll('.avis-submit').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const ref = btn.getAttribute('data-ref');
+      const row = container.querySelector('.star-row[data-ref="' + ref + '"]');
+      const note = parseInt(row.getAttribute('data-note'), 10) || 0;
+      const status = container.querySelector('.avis-status[data-ref="' + ref + '"]');
+      if(note < 1){ status.innerHTML = '<span style="color:var(--accent);">Choisis une note de 1 à 5.</span>'; return; }
+      const commentaire = container.querySelector('.avis-text[data-ref="' + ref + '"]').value.trim();
+      const order = getOrder(ref);
+      if(!order) return;
+      btn.disabled = true;
+      try{
+        const avis = { note, commentaire, ts: Date.now() };
+        await db.ref('commandes/' + ref).update({ avis });
+        order.avis = avis;
+        await sendDiscordThreadMessage(order, '⭐ **Avis du client** : ' + note + '/5' + (commentaire ? '\n' + commentaire : ''));
+        renderMyOrdersFromCache();
+      }catch(e){
+        status.innerHTML = '<span style="color:var(--accent);">Erreur lors de l\'envoi, réessaie.</span>';
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
 function renderMyOrdersFromCache(){
   const host = document.getElementById('cmdMyOrdersList');
   const orders = Object.values(myOrdersCache);
@@ -3951,6 +4127,7 @@ function renderMyOrdersFromCache(){
       '<div class="order-doc" data-ref="' + o.ref + '" style="display:none;margin-top:10px;"></div>' +
       proofBoxHTML(o) +
       dispoBoxHTML(o) +
+      avisBoxHTML(o) +
       '</div>';
   }).join('');
 
@@ -3977,6 +4154,7 @@ function renderMyOrdersFromCache(){
     });
   });
 
+  wireAvis(host, ref => orders.find(o=>o.ref===ref));
   wireProofSubmit(host, ref => orders.find(o=>o.ref===ref), () => renderMyOrders());
   wireDispoSubmit(host, ref => orders.find(o=>o.ref===ref), () => renderMyOrders());
 }
@@ -4134,6 +4312,8 @@ function openCommandeDetail(order){
     (order.enLivraison ? '<p style="padding:0 24px 4px;color:var(--gold);font-weight:bold;">🚚 Commande en cours de livraison</p>' : '') +
     (order.prete ? '<p style="padding:0 24px 4px;color:var(--gold);font-weight:bold;">' + (order.modeLivraison === 'livraison' ? '🚚 Commande marquée prête (livraison)' : '🍱 Commande marquée prête (récupération)') + '</p>' : '') +
     (order.disponibilite ? '<p style="padding:0 24px 12px;color:var(--gold);">📅 Disponibilité du client : ' + escapeHtml(order.disponibilite) + '</p>' : '') +
+    (order.remise ? '<p style="padding:0 24px 4px;color:var(--ok);font-weight:bold;">✅ Commande remise au client</p>' : '') +
+    (order.avis ? '<p style="padding:0 24px 12px;color:var(--gold);font-weight:bold;">⭐ Avis du client : ' + order.avis.note + '/5' + (order.avis.commentaire ? ' : ' + escapeHtml(order.avis.commentaire) : '') + '</p>' : '') +
     (order.archivee ? '<p style="padding:0 24px 12px;color:var(--text-muted);font-weight:bold;">📦 Commande archivée</p>' : '');
   const isPending = order.statut === 'en_attente';
   const isValidee = order.statut === 'validee';
@@ -4145,6 +4325,8 @@ function openCommandeDetail(order){
   document.getElementById('commandePaidBtn').style.display = isValidee ? 'inline-block' : 'none';
   document.getElementById('commandePretBtn').style.display = canMarkReady ? 'inline-block' : 'none';
   document.getElementById('commandeLivraisonBtn').style.display = peutMarquerEnLivraison(order) ? 'inline-block' : 'none';
+  document.getElementById('commandeRemiseBtn').style.display = peutMarquerRemise(order) ? 'inline-block' : 'none';
+  attachNotesListener(order.ref);
   document.getElementById('commandeArchiveBtn').style.display = canArchive ? 'inline-block' : 'none';
   document.getElementById('commandeCancelBtn').style.display = canCancel ? 'inline-block' : 'none';
   document.getElementById('commandeDetailModal').style.display = 'flex';
@@ -4219,6 +4401,101 @@ async function markCommandeEnLivraison(){
   renderCommandesList();
 }
 document.getElementById('commandeLivraisonBtn').addEventListener('click', markCommandeEnLivraison);
+
+document.getElementById('commandeRemiseBtn').addEventListener('click', async ()=>{
+  if(!currentDetailOrder || !db || !peutMarquerRemise(currentDetailOrder)) return;
+  await db.ref('commandes/' + currentDetailOrder.ref).update({ remise: true, remiseTs: Date.now() });
+  currentDetailOrder.remise = true;
+  logAction('Commande remise au client', currentDetailOrder.client);
+  await notifyOrderUpdate(currentDetailOrder, "✅ Votre commande a bien été **remise**. Merci ! Vous pouvez donner votre avis sur le site (Suivre ma commande).");
+  document.getElementById('commandeDetailModal').style.display = 'none';
+  renderCommandesList();
+});
+
+/* ---- Notes internes (stockées à part, jamais lues côté client) ---- */
+let notesListenerRef = null;
+function attachNotesListener(ref){
+  if(notesListenerRef) db.ref('commandes_notes/' + notesListenerRef).off('value');
+  notesListenerRef = ref;
+  const list = document.getElementById('commandeNotesList');
+  list.innerHTML = '<p class="hint">Chargement…</p>';
+  db.ref('commandes_notes/' + ref).on('value', snap => {
+    const v = snap.val() || {};
+    const notes = Object.values(v).sort((a,b) => a.ts - b.ts);
+    list.innerHTML = notes.length === 0 ? '<p class="hint">Aucune note pour cette commande.</p>' :
+      notes.map(n => '<div class="note-item">' + escapeHtml(n.texte) + '<small>' + escapeHtml(n.auteur || 'Staff') + ', ' + new Date(n.ts).toLocaleString('fr-FR') + '</small></div>').join('');
+  });
+}
+document.getElementById('commandeNoteAdd').addEventListener('click', async ()=>{
+  if(!currentDetailOrder || !db) return;
+  const input = document.getElementById('commandeNoteInput');
+  const texte = input.value.trim();
+  if(!texte) return;
+  await db.ref('commandes_notes/' + currentDetailOrder.ref).push({ texte, auteur: (currentUser && currentUser.nom) || 'Staff', ts: Date.now() });
+  input.value = '';
+  logAction('Note interne ajoutée', currentDetailOrder.client);
+});
+
+/* ---- Fiches clients ---- */
+function clientKeyOf(name){ return String(name || '').trim().toLowerCase(); }
+function statsClient(name){
+  const key = clientKeyOf(name);
+  const orders = allCommandesCache.filter(o => clientKeyOf(o.client) === key).sort((a,b) => b.ts - a.ts);
+  const payees = orders.filter(o => o.statut === 'payee');
+  const notes = orders.filter(o => o.avis).map(o => o.avis.note);
+  return {
+    nom: orders[0] ? orders[0].client : name,
+    orders,
+    total: payees.reduce((s,o) => s + (o.ttc || 0), 0),
+    nbPayees: payees.length,
+    dernier: orders[0] ? orders[0].ts : 0,
+    noteMoy: notes.length ? (notes.reduce((a,b)=>a+b,0) / notes.length) : null,
+    tel: (orders.find(o => o.tel) || {}).tel || ''
+  };
+}
+const FICHE_STATUT = { en_attente:'⏳ En attente', validee:'✅ Validée', payee:'💰 Payée', refusee:'❌ Refusée', annulee:'🚫 Annulée' };
+function showClientFiche(name){
+  const st = statsClient(name);
+  const host = document.getElementById('clientFicheContent');
+  host.innerHTML = '<h2>' + escapeHtml(st.nom) + '</h2>' +
+    (st.tel ? '<p class="hint">Téléphone : ' + escapeHtml(st.tel) + '</p>' : '') +
+    '<div class="fiche-stats">' +
+    '<div><b>' + st.orders.length + '</b>commande' + (st.orders.length > 1 ? 's' : '') + '</div>' +
+    '<div><b>' + formatMoneyPlain(st.total) + '</b>total payé (' + st.nbPayees + ')</div>' +
+    '<div><b>' + (st.dernier ? new Date(st.dernier).toLocaleDateString('fr-FR') : '-') + '</b>dernier passage</div>' +
+    '<div><b>' + (st.noteMoy !== null ? st.noteMoy.toFixed(1) + '/5' : '-') + '</b>note moyenne</div>' +
+    '</div>' +
+    st.orders.map(o => '<div class="fiche-row" data-ref="' + o.ref + '"><span>' + new Date(o.ts).toLocaleDateString('fr-FR') + '</span><span>' + escapeHtml(o.ref) + '</span><span>' + formatMoneyPlain(o.ttc) + '</span><span>' + (FICHE_STATUT[o.statut] || o.statut) + '</span></div>').join('');
+  host.querySelectorAll('.fiche-row').forEach(row=>{
+    row.addEventListener('click', ()=>{
+      const o = allCommandesCache.find(x => x.ref === row.getAttribute('data-ref'));
+      if(o){ document.getElementById('clientFicheModal').style.display = 'none'; openCommandeDetail(o); }
+    });
+  });
+  document.getElementById('clientFicheBack').style.display = 'inline-block';
+  document.getElementById('clientFicheModal').style.display = 'flex';
+}
+function showClientsList(){
+  const names = {};
+  allCommandesCache.forEach(o => { names[clientKeyOf(o.client)] = o.client; });
+  const rows = Object.values(names).map(n => statsClient(n)).sort((a,b) => b.total - a.total);
+  const host = document.getElementById('clientFicheContent');
+  host.innerHTML = '<h2>Fiches clients</h2>' + (rows.length === 0 ? '<p class="hint">Aucun client pour le moment.</p>' :
+    rows.map(st => '<div class="fiche-row" data-client="' + escapeHtml(st.nom) + '"><span>' + escapeHtml(st.nom) + '</span><span>' + st.orders.length + ' commande' + (st.orders.length > 1 ? 's' : '') + '</span><span>' + formatMoneyPlain(st.total) + '</span><span>' + (st.dernier ? new Date(st.dernier).toLocaleDateString('fr-FR') : '') + '</span></div>').join(''));
+  host.querySelectorAll('.fiche-row').forEach(row=>{
+    row.addEventListener('click', ()=> showClientFiche(row.getAttribute('data-client')));
+  });
+  document.getElementById('clientFicheBack').style.display = 'none';
+  document.getElementById('clientFicheModal').style.display = 'flex';
+}
+document.getElementById('clientsListBtn').addEventListener('click', showClientsList);
+document.getElementById('clientFicheBack').addEventListener('click', showClientsList);
+document.getElementById('clientFicheClose').addEventListener('click', ()=>{ document.getElementById('clientFicheModal').style.display = 'none'; });
+document.getElementById('commandeFicheBtn').addEventListener('click', ()=>{
+  if(!currentDetailOrder) return;
+  document.getElementById('commandeDetailModal').style.display = 'none';
+  showClientFiche(currentDetailOrder.client);
+});
 
 document.getElementById('commandeCancelBtn').addEventListener('click', async ()=>{
   if(!currentDetailOrder || !db) return;
