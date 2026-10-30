@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Umami — Registre du personnel</title>
+<title>Umami | Registre du personnel</title>
 <style>
   :root{
     --ink:#161311;
@@ -836,6 +836,67 @@ th,.stat-card .stat-label{font-family:var(--f-body);text-transform:none;letter-s
 @media (max-width:560px){.mode-choice{grid-template-columns:1fr;}}
 @media (prefers-reduced-motion:reduce){.mode-choice.missing .mode-tile{animation:none;}.mode-tile:hover{transform:none;}}
 </style>
+<style id="refonte2">
+/* ===== Refonte 2 : affiche japonaise, grain papier, ombres dures ===== */
+body{background-image:none;background-color:var(--ink);}
+body::after{content:"";position:fixed;inset:0;z-index:2000;pointer-events:none;opacity:.09;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");}
+@media print{body::after{display:none;}}
+
+/* bandeau de page : aplat vermillon */
+header.top{background:var(--accent);border-top:0;border-bottom:4px solid #0f0d0c;padding:36px 28px 28px;}
+header.top h1{color:#fbf4e4;font-size:clamp(40px,7vw,76px);line-height:.95;}
+header.top .brand-mark{color:#0f0d0c;font-size:15px;}
+header.top .subtitle{color:#fbf4e4;opacity:.92;font-size:14px;}
+header.top .stamp{color:#fbf4e4;border-color:rgba(251,244,228,.55);}
+header.top .stamp b{color:#0f0d0c;}
+header.top .header-logo-small{width:92px!important;height:92px!important;border-radius:50%;box-shadow:0 0 0 4px #0f0d0c,6px 8px 0 4px rgba(15,13,12,.55);}
+html[data-theme="light"] header.top{border-bottom-color:#16110f;}
+
+/* boutons : relief dur */
+.btn{border-radius:2px;box-shadow:0 3px 0 #7d1610;transition:transform .08s ease,box-shadow .08s ease,background .15s ease;}
+.btn:active{transform:translateY(3px);box-shadow:0 0 0 #7d1610;}
+.btn.secondary{box-shadow:none;border-width:2px;}
+.btn.secondary:active{transform:none;}
+
+/* accueil */
+#landingScreen{background:#0c0a09;}
+#landingScreen::before{display:none;}
+.landing-sun{position:absolute;right:-16vmin;top:50%;width:106vmin;height:106vmin;border-radius:50%;background:radial-gradient(circle at 34% 30%,#ec3a2c 0,#d62a1f 46%,#b81f16 100%);box-shadow:0 0 160px rgba(214,42,31,.45);transform:translateY(-50%);animation:sun-rise 1.3s cubic-bezier(.16,.8,.2,1) both;}
+@keyframes sun-rise{from{opacity:0;transform:translateY(-38%) scale(.82);}to{opacity:1;transform:translateY(-50%) scale(1);}}
+.landing-dragon{right:-1vmin;width:min(80vmin,780px);filter:drop-shadow(14px 20px 0 rgba(12,10,9,.55));animation:dragon-in 1.3s .25s cubic-bezier(.2,.7,.2,1) both;}
+.landing-inner{padding-left:clamp(24px,6vw,110px);width:min(100%,760px);}
+.landing-hanko{display:inline-grid;grid-template-rows:1fr 1fr;place-items:center;width:62px;height:84px;margin:0 0 22px;background:var(--accent);color:#fbf4e4;font-family:var(--f-display);font-weight:800;font-size:30px;line-height:1;transform:rotate(-5deg);box-shadow:inset 0 0 0 3px rgba(251,244,228,.9),5px 5px 0 #f1e8d3;user-select:none;}
+.landing-eyebrow{display:none;}
+.landing-title{font-size:clamp(76px,13.5vw,210px);line-height:.82;letter-spacing:.01em;margin:0 0 0 -.04em;color:#fbf4e4;position:relative;z-index:3;}
+.landing-sub{font-size:17px;margin:26px 0 30px;color:#e9dec6;}
+.landing-choices{max-width:460px;gap:18px;}
+.landing-card{background:#0c0a09;border:2px solid #f1e8d3;border-left:2px solid #f1e8d3;border-radius:0;padding:18px 24px 20px;box-shadow:6px 6px 0 var(--accent);backdrop-filter:none;transition:transform .12s ease,box-shadow .12s ease,background .15s ease;}
+.landing-card:hover{transform:translate(-3px,-3px);box-shadow:10px 10px 0 var(--accent);background:#14100f;border-color:#f1e8d3;}
+.landing-card:active{transform:translate(4px,4px);box-shadow:2px 2px 0 var(--accent);}
+.landing-card .lc-title{font-size:26px;}
+.staff-link a{color:#e9dec6;}
+#cmdSpaceChoice .landing-card{width:300px;}
+@media (max-width:860px){
+  .landing-sun{right:auto;left:50%;top:-6vw;width:128vw;height:128vw;transform:translateX(-50%);animation:sun-rise-m 1.3s cubic-bezier(.16,.8,.2,1) both;}
+  @keyframes sun-rise-m{from{opacity:0;transform:translateX(-50%) scale(.82);}to{opacity:1;transform:translateX(-50%) scale(1);}}
+  .landing-dragon{right:auto;left:50%;top:3vh;width:min(74vw,340px);transform:translateX(-50%);animation:dragon-in-m 1.3s .25s cubic-bezier(.2,.7,.2,1) both;}
+  .landing-inner{padding:calc(min(74vw,340px) + 8vh) 22px 56px;}
+  .landing-title{font-size:clamp(72px,24vw,130px);}
+  .landing-sub{margin-top:20px;}
+}
+
+/* choix retrait / livraison */
+.mode-tile{border:2px solid #f1e8d3;border-radius:0;background:var(--panel);box-shadow:6px 6px 0 var(--line);}
+html[data-theme="light"] .mode-tile{border-color:#16110f;}
+.mode-tile:hover{transform:translate(-2px,-2px);box-shadow:8px 8px 0 var(--accent);border-color:#f1e8d3;}
+.mode-tile.on{background:var(--accent);border-color:#f1e8d3;box-shadow:6px 6px 0 #0f0d0c;}
+.mode-choice.missing .mode-tile{border-color:var(--accent);box-shadow:6px 6px 0 var(--accent);}
+
+.members-panel{border-radius:0;border:2px solid #f1e8d3;border-top:6px solid var(--accent);box-shadow:8px 8px 0 rgba(214,42,31,.7);}
+html[data-theme="light"] .members-panel{border-color:#16110f;}
+.chart-box,.stat-card{border-radius:0;}
+nav.tabs button.active{border-bottom-width:3px;}
+</style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -846,8 +907,10 @@ th,.stat-card .stat-label{font-family:var(--f-body);text-transform:none;letter-s
 
 <div id="landingScreen">
   <div class="landing-bg"></div>
+  <div class="landing-sun" aria-hidden="true"></div>
   <img class="header-logo-small landing-dragon" src="" alt="Logo Umami Restaurant">
   <div class="landing-inner">
+    <div class="landing-hanko" aria-hidden="true"><span>旨</span><span>味</span></div>
     <p class="landing-eyebrow">Umami Marina</p>
     <h1 class="landing-title">UMAMI</h1>
     <p class="landing-sub" id="landingSub">Passez votre commande en quelques clics</p>
@@ -988,7 +1051,7 @@ th,.stat-card .stat-label{font-family:var(--f-body);text-transform:none;letter-s
     </div>
     </div>
 
-    <footer>Umami — usage interne</footer>
+    <footer>Umami, usage interne</footer>
   </div>
 </div>
 
@@ -1162,7 +1225,7 @@ th,.stat-card .stat-label{font-family:var(--f-body);text-transform:none;letter-s
 
   </div>
 
-  <footer>Umami — usage interne</footer>
+  <footer>Umami, usage interne</footer>
 </div>
 
 </div>
@@ -1271,7 +1334,7 @@ th,.stat-card .stat-label{font-family:var(--f-body);text-transform:none;letter-s
       <div class="field wide"><label>Mention à pinguer (optionnel)</label><input type="text" id="ew-new-mention" placeholder="Ex. &lt;@123456789012345678&gt; (personne) ou &lt;@&amp;123456789012345678&gt; (rôle)"></div>
       <button class="btn secondary" id="ew-add" type="button">Ajouter</button>
     </div>
-    <p class="hint">Pour un rôle, le format doit être <code>&lt;@&amp;ID&gt;</code> (avec le "&amp;") — pour une personne, <code>&lt;@ID&gt;</code> (sans). Mode développeur Discord (Paramètres → Avancés) puis clic droit → "Copier l'ID".</p>
+    <p class="hint">Pour un rôle, le format doit être <code>&lt;@&amp;ID&gt;</code> (avec le "&amp;") ; pour une personne, <code>&lt;@ID&gt;</code> (sans). Mode développeur Discord (Paramètres → Avancés) puis clic droit → "Copier l'ID".</p>
     <p class="auth-error" id="ew-error"></p>
     <div class="add-actions"><button class="btn secondary" id="entreprisesWebhooksPanelClose" type="button">Fermer</button></div>
   </section>
@@ -1370,7 +1433,7 @@ th,.stat-card .stat-label{font-family:var(--f-body);text-transform:none;letter-s
     <p class="result-count" id="commandesResultCount"></p>
     <div id="commandesList" class="hist-list"></div>
 
-    <footer>Umami — usage interne</footer>
+    <footer>Umami, usage interne</footer>
   </div>
 </div>
 
@@ -1493,7 +1556,7 @@ th,.stat-card .stat-label{font-family:var(--f-body);text-transform:none;letter-s
       <div id="cmdTrackResult"></div>
     </div>
 
-    <footer>Umami — usage interne</footer>
+    <footer>Umami, usage interne</footer>
   </div>
 </div>
 
@@ -1884,8 +1947,8 @@ function fournisseurStatusIcons(str){
     const info = invSuppliers[n];
     if(!info) return '';
     return info.vivant === false
-      ? ' <span title="' + escapeHtml(n) + ' — mort" style="color:var(--accent);">☠</span>'
-      : ' <span title="' + escapeHtml(n) + ' — vivant" style="color:var(--ok);">●</span>';
+      ? ' <span title="' + escapeHtml(n) + ' : mort" style="color:var(--accent);">☠</span>'
+      : ' <span title="' + escapeHtml(n) + ' : vivant" style="color:var(--ok);">●</span>';
   }).join('');
 }
 
@@ -1932,7 +1995,7 @@ function renderFournisseursPanel(){
       const current = invSuppliers[name] ? invSuppliers[name].vivant !== false : true;
       invSuppliers[name] = { vivant: !current };
       await persistInvSuppliers();
-      logAction('Statut fournisseur modifié', name + ' — ' + (!current ? 'Vivant' : 'Mort'));
+      logAction('Statut fournisseur modifié', name + ' : ' + (!current ? 'Vivant' : 'Mort'));
       renderFournisseursPanel();
       renderInvTable();
     });
@@ -2118,7 +2181,7 @@ function renderInvTable(){
         it.qte = (it.bar||0) + (it.restaurant||0) + (it.boutique||0) + (it.jardin||0) + (it.chicha||0) + (it.cuisine||0) + (it.reserve||0);
       }
       await persistInventory();
-      logAction('Modification stock', invItems[idx].nom + ' — ' + INV_SORT_LABELS[field] + ' : ' + oldVal + ' → ' + value);
+      logAction('Modification stock', invItems[idx].nom + ' : ' + INV_SORT_LABELS[field] + ' : ' + oldVal + ' → ' + value);
       renderInvTabs();
       renderInvTable();
     });
@@ -2377,7 +2440,7 @@ document.getElementById('toggleStaffLink').addEventListener('click', (e)=>{
   const opening = staffEl.style.display === 'none';
   staffEl.style.display = opening ? 'flex' : 'none';
   publicEl.style.display = opening ? 'none' : 'flex';
-  document.getElementById('landingSub').textContent = opening ? 'Espace interne — choisis un module' : 'Passez votre commande en quelques clics';
+  document.getElementById('landingSub').textContent = opening ? 'Espace interne : choisis un module' : 'Passez votre commande en quelques clics';
   e.target.textContent = opening ? '← Retour' : 'Accès staff';
 });
 document.getElementById('authBack').addEventListener('click', ()=> showLanding());
@@ -3128,7 +3191,7 @@ async function sendDiscordMessage(content, pingRole){
 // Envoie un message dans le fil Discord d'une commande (si le fil existe)
 async function sendDiscordThreadMessage(order, content){
   if(!order) return;
-  const withRef = '**Réf. ' + order.ref + ' — ' + order.client + '**\n' + content;
+  const withRef = '**Réf. ' + order.ref + ' : ' + order.client + '**\n' + content;
   if(order.discordThreadId){
     await discordPost({ content }, order.discordThreadId);
   }else{
@@ -3144,7 +3207,7 @@ async function notifyClientWebhook(order, content){
     await fetch(order.clientWebhook, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: mentionPrefix + '**Umami — Commande ' + order.ref + '**\n' + content })
+      body: JSON.stringify({ content: mentionPrefix + '**Umami : Commande ' + order.ref + '**\n' + content })
     });
   }catch(e){ console.error('Erreur webhook client', e); }
 }
@@ -3170,7 +3233,7 @@ async function sendInvoiceToFinanceChannel(order){
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     const formData = new FormData();
     formData.append('payload_json', JSON.stringify({
-      content: '💰 **Facture payée** — ' + order.client + ' (réf. `' + order.ref + '`) — ' + formatMoneyPlain(order.ttc) + ' TTC'
+      content: '💰 **Facture payée** : ' + order.client + ' (réf. `' + order.ref + '`) : ' + formatMoneyPlain(order.ttc) + ' TTC'
     }));
     formData.append('files[0]', blob, 'facture-' + order.ref + '.png');
     await fetch(DISCORD_INVOICE_WEBHOOK_URL, { method: 'POST', body: formData });
@@ -3308,7 +3371,7 @@ function generateDevisHTML(order, docType){
     (logoSrc ? '<img src="' + logoSrc + '" alt="Umami" style="width:110px;height:110px;">' : '') +
     '</div>' +
     '<h1 style="margin:20px 0 4px;color:#f4ece0;font-size:38px;">' + docType + '</h1>' +
-    '<p style="color:#e0392a;">' + dateStr + (order.ref ? ' — Réf. ' + escapeHtml(order.ref) : '') + '</p>' +
+    '<p style="color:#e0392a;">' + dateStr + (order.ref ? ' : Réf. ' + escapeHtml(order.ref) : '') + '</p>' +
     '<p style="margin:14px 0 4px;"><b>Client :</b></p>' +
     '<p style="margin:0 0 14px;color:#e0392a;font-weight:bold;font-size:1.1em;">' + escapeHtml(order.client) + '</p>' +
     '<p><b>Zone Fiscale :</b> ' + zoneBox('Sud') + '&nbsp;&nbsp;' + zoneBox('Nord') + '&nbsp;&nbsp;' + zoneBox('Cayo') + '</p>' +
@@ -3322,10 +3385,10 @@ function generateDevisHTML(order, docType){
     '<p style="text-align:right;margin-top:14px;color:#e0392a;">Poids : ' + order.poids + ' KG</p>' +
     '<p style="text-align:right;color:#f4ece0;">Sous-total HT : <b>' + formatMoneyPlain(order.sousTotalHT) + '</b></p>' +
     '<p style="text-align:right;font-size:1.3em;color:#f4ece0;">TTC : <b>' + formatMoneyPlain(order.ttc) + '</b></p>' +
-    (order.statut === 'annulee' ? '<p style="color:#e0392a;font-weight:bold;">Commande annulée — merci de refaire une nouvelle commande si besoin.</p>' : '') +
-    (order.statut === 'refusee' ? '<p style="color:#e0392a;font-weight:bold;">Commande refusée' + (order.raisonRefus ? ' — ' + escapeHtml(order.raisonRefus) : '') + '</p>' : '') +
+    (order.statut === 'annulee' ? '<p style="color:#e0392a;font-weight:bold;">Commande annulée : merci de refaire une nouvelle commande si besoin.</p>' : '') +
+    (order.statut === 'refusee' ? '<p style="color:#e0392a;font-weight:bold;">Commande refusée' + (order.raisonRefus ? ' : ' + escapeHtml(order.raisonRefus) : '') + '</p>' : '') +
     (order.statut === 'en_attente' ? '<p style="color:#c98a2d;font-weight:bold;">En attente de validation par notre équipe. Ceci est un devis, pas encore une facture officielle.</p>' : '') +
-    (order.statut === 'validee' ? '<p style="color:#5c8a5c;font-weight:bold;">Commande validée ✓ — En attente de paiement</p>' : '') +
+    (order.statut === 'validee' ? '<p style="color:#5c8a5c;font-weight:bold;">Commande validée ✓. En attente de paiement</p>' : '') +
     (order.statut === 'payee' ? '<p style="color:#5c8a5c;font-weight:bold;font-size:1.15em;">FACTURE PAYÉE ✓</p>' : '') +
     (order.paiementCash ? '<p style="color:#c98a2d;font-weight:bold;">💵 Le client paie en personne (pas de virement)</p>' : '') +
     '</div>';
@@ -3443,8 +3506,8 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
 
     const rolePings = DISCORD_ROLE_IDS.map(id => '<@&' + id + '>').join(' ');
     const pingText = (rolePings ? (rolePings + ' ') : '') +
-      '📥 **Nouvelle commande** de **' + client + '** (' + zone + ' — ' + (modeLivraison === 'livraison' ? '🚚 Livraison' : '🍱 Retrait sur place') + ')\n' +
-      lignes.map(l => '• ' + l.nom + ' x' + l.qte + ' — ' + formatMoneyPlain(l.prixTotal)).join('\n') +
+      '📥 **Nouvelle commande** de **' + client + '** (' + zone + ', ' + (modeLivraison === 'livraison' ? '🚚 Livraison' : '🍱 Retrait sur place') + ')\n' +
+      lignes.map(l => '• ' + l.nom + ' x' + l.qte + ' : ' + formatMoneyPlain(l.prixTotal)).join('\n') +
       '\n**Total TTC : ' + formatMoneyPlain(ttc) + '**\nRéférence : `' + refKey + '`' +
       (tel ? '\nTéléphone : ' + tel : '') +
       (dispoInitiale ? '\n📅 Disponibilités : ' + dispoInitiale : '') +
@@ -3453,7 +3516,7 @@ document.getElementById('cmdSubmitBtn').addEventListener('click', async ()=>{
     const msg = await discordPost(
       { content: pingText, allowed_mentions: DISCORD_ROLE_IDS.length ? { roles: DISCORD_ROLE_IDS } : undefined },
       null,
-      'Commande ' + refKey + ' — ' + client
+      'Commande ' + refKey + ' : ' + client
     );
     if(msg && msg.channel_id) order.discordThreadId = msg.channel_id;
 
@@ -3535,10 +3598,10 @@ function rememberMyOrder(refKey){
 
 const STATUT_BADGE = {
   en_attente: '<span style="color:var(--warn);">⏳ En attente de validation</span>',
-  validee: '<span style="color:var(--ok);">✅ Validée — en attente de paiement</span>',
+  validee: '<span style="color:var(--ok);">✅ Validée, en attente de paiement</span>',
   payee: '<span style="color:var(--ok);font-weight:bold;">💰 Payée ✓</span>',
   refusee: '<span style="color:var(--accent);">❌ Refusée</span>',
-  annulee: '<span style="color:var(--accent);">🚫 Annulée — à refaire si besoin</span>'
+  annulee: '<span style="color:var(--accent);">🚫 Annulée, à refaire si besoin</span>'
 };
 
 let myOrdersCache = {};
@@ -3565,7 +3628,7 @@ function showPaymentPopup(order){
   document.getElementById('paymentPopupModal').style.display = 'flex';
   try{
     if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
-      new Notification("Umami — Commande validée", { body: "Ta commande " + order.ref + " est validée : choisis ton mode de paiement." });
+      new Notification("Umami : Commande validée", { body: "Ta commande " + order.ref + " est validée : choisis ton mode de paiement." });
     }
   }catch(e){}
 }
@@ -3576,7 +3639,7 @@ function peutMarquerEnLivraison(order){
 function etatPreteClient(o){
   if(o.enLivraison) return "🚚 En cours de livraison";
   if(!o.prete) return "";
-  return o.modeLivraison === 'livraison' ? "📦 Prête — la livraison va bientôt partir" : "🍱 Prête à récupérer";
+  return o.modeLivraison === 'livraison' ? "📦 Prête, la livraison va bientôt partir" : "🍱 Prête à récupérer";
 }
 function livraisonDejaVue(ref){
   try{ return (JSON.parse(localStorage.getItem('umami_livraison_vue') || '[]')).indexOf(ref) >= 0; }catch(e){ return false; }
@@ -3595,7 +3658,7 @@ function showDeliveryPopup(order){
   document.getElementById('deliveryPopupModal').style.display = 'flex';
   try{
     if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
-      new Notification("Umami — En cours de livraison", { body: "Ta commande " + order.ref + " est en cours de livraison !" });
+      new Notification("Umami : En cours de livraison", { body: "Ta commande " + order.ref + " est en cours de livraison !" });
     }
   }catch(e){}
 }
@@ -3642,7 +3705,7 @@ function showReadyPopup(order){
   modal.style.display = 'flex';
   try{
     if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
-      new Notification('Umami — Commande prête', { body: 'Ta commande ' + order.ref + ' est prête !' });
+      new Notification('Umami : Commande prête', { body: 'Ta commande ' + order.ref + ' est prête !' });
     }else if(typeof Notification !== 'undefined' && Notification.permission !== 'denied'){
       Notification.requestPermission();
     }
@@ -3666,10 +3729,10 @@ function renderMyOrders(){
 function proofBoxHTML(o){
   if(o.statut !== 'validee') return '';
   if(o.paiementCash){
-    return "<p class=\"hint\" style=\"color:var(--gold);margin-top:10px;\">💵 Paiement en personne choisi — réglez directement avec un membre de l'équipe.</p>";
+    return "<p class=\"hint\" style=\"color:var(--gold);margin-top:10px;\">💵 Paiement en personne choisi. Réglez directement avec un membre de l'équipe.</p>";
   }
   return '<div class="add-grid" style="margin-top:10px;">' +
-    '<div class="field wide"><label>Preuve de paiement — lien ou référence</label><input type="text" class="proof-input" data-ref="' + o.ref + '" value="' + escapeHtml(o.preuvePaiement||'') + '" placeholder="Ex. référence du virement"></div>' +
+    '<div class="field wide"><label>Preuve de paiement (lien ou référence)</label><input type="text" class="proof-input" data-ref="' + o.ref + '" value="' + escapeHtml(o.preuvePaiement||'') + '" placeholder="Ex. référence du virement"></div>' +
     "<div class=\"field wide\"><label>Ou capture d'écran (photo)</label><input type=\"file\" accept=\"image/*\" class=\"proof-file\" data-ref=\"" + o.ref + "\"></div>" +
     '<button class="btn secondary proof-submit" data-ref="' + o.ref + '" type="button">Envoyer la preuve</button>' +
     '</div>' +
@@ -3782,9 +3845,9 @@ function renderMyOrdersFromCache(){
   host.innerHTML = orders.map(o => {
     return '<div class="chart-box" style="margin:14px 0;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-      '<b>' + escapeHtml(o.client) + '</b> — <span class="hint">' + escapeHtml(o.ref) + '</span>' +
+      '<b>' + escapeHtml(o.client) + '</b> <span class="hint">' + escapeHtml(o.ref) + '</span>' +
       '</div>' +
-      '<p>' + (STATUT_BADGE[o.statut] || o.statut) + (etatPreteClient(o) ? ' — <span style="color:var(--gold);font-weight:bold;">' + etatPreteClient(o) + '</span>' : '') + '</p>' +
+      '<p>' + (STATUT_BADGE[o.statut] || o.statut) + (etatPreteClient(o) ? ', <span style="color:var(--gold);font-weight:bold;">' + etatPreteClient(o) + '</span>' : '') + '</p>' +
       '<div class="add-actions" style="justify-content:flex-start;">' +
       '<button class="btn secondary view-order" data-ref="' + o.ref + '" type="button">Voir le document</button>' +
       '</div>' +
@@ -3996,8 +4059,8 @@ document.getElementById('commandeAcceptBtn').addEventListener('click', async ()=
   if(!confirm("⚠️ Attention : as-tu bien vérifié les stocks avant de valider cette commande ?")) return;
   await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'validee' });
   currentDetailOrder.statut = 'validee';
-  logAction('Commande validée', currentDetailOrder.client + ' — ' + formatMoneyPlain(currentDetailOrder.ttc));
-  await notifyOrderUpdate(currentDetailOrder, "✅ Commande **validée** — " + formatMoneyPlain(currentDetailOrder.ttc) + " TTC.\n**Choisissez votre mode de paiement :**\n💳 Paiement par **virement**\n💵 Paiement **sur place en facture directe**\nMerci d'indiquer votre choix sur le site (Suivre ma commande).");
+  logAction('Commande validée', currentDetailOrder.client + ' : ' + formatMoneyPlain(currentDetailOrder.ttc));
+  await notifyOrderUpdate(currentDetailOrder, "✅ Commande **validée** : " + formatMoneyPlain(currentDetailOrder.ttc) + " TTC.\n**Choisissez votre mode de paiement :**\n💳 Paiement par **virement**\n💵 Paiement **sur place en facture directe**\nMerci d'indiquer votre choix sur le site (Suivre ma commande).");
   document.getElementById('commandeDetailModal').style.display = 'none';
   renderCommandesList();
 });
@@ -4007,8 +4070,8 @@ document.getElementById('commandeRefuseBtn').addEventListener('click', async ()=
   const raison = prompt('Raison du refus (optionnel) :') || '';
   await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'refusee', raisonRefus: raison });
   currentDetailOrder.statut = 'refusee';
-  logAction('Commande refusée', currentDetailOrder.client + (raison ? ' — ' + raison : ''));
-  await notifyOrderUpdate(currentDetailOrder, '❌ Commande **refusée**' + (raison ? ' — ' + raison : ''));
+  logAction('Commande refusée', currentDetailOrder.client + (raison ? ' : ' + raison : ''));
+  await notifyOrderUpdate(currentDetailOrder, '❌ Commande **refusée**' + (raison ? ' : ' + raison : ''));
   document.getElementById('commandeDetailModal').style.display = 'none';
   renderCommandesList();
 });
@@ -4017,7 +4080,7 @@ document.getElementById('commandePaidBtn').addEventListener('click', async ()=>{
   if(!currentDetailOrder || !db) return;
   await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'payee' });
   currentDetailOrder.statut = 'payee';
-  logAction('Commande marquée payée', currentDetailOrder.client + ' — ' + formatMoneyPlain(currentDetailOrder.ttc));
+  logAction('Commande marquée payée', currentDetailOrder.client + ' : ' + formatMoneyPlain(currentDetailOrder.ttc));
   await notifyOrderUpdate(currentDetailOrder, '💰 Commande marquée **payée** ✓ Merci !');
   await sendInvoiceToFinanceChannel(currentDetailOrder);
   await sendInvoiceToGoogleSheet(currentDetailOrder);
@@ -4060,8 +4123,8 @@ document.getElementById('commandeCancelBtn').addEventListener('click', async ()=
   await db.ref('commandes/' + currentDetailOrder.ref).update({ statut: 'annulee', archivee: true, raisonAnnulation: raison, annuleeTs: Date.now() });
   currentDetailOrder.statut = 'annulee';
   currentDetailOrder.archivee = true;
-  logAction('Commande annulée', currentDetailOrder.client + (raison ? ' — ' + raison : ''));
-  await notifyOrderUpdate(currentDetailOrder, "🚫 Votre commande a été **annulée**" + (raison ? ' — ' + raison : '') + ". Si vous en souhaitez toujours une, merci d'en refaire une nouvelle sur le site.");
+  logAction('Commande annulée', currentDetailOrder.client + (raison ? ' : ' + raison : ''));
+  await notifyOrderUpdate(currentDetailOrder, "🚫 Votre commande a été **annulée**" + (raison ? ' : ' + raison : '') + ". Si vous en souhaitez toujours une, merci d'en refaire une nouvelle sur le site.");
   document.getElementById('commandeDetailModal').style.display = 'none';
   renderCommandesList();
 });
@@ -4809,7 +4872,7 @@ document.getElementById('comptaSubmit').addEventListener('click', async ()=>{
       }
     }
 
-    logAction('Justificatif enregistré', titre + ' — ' + libelle + (montant !== '' ? ' — ' + formatMoneyPlain(montant) : ''));
+    logAction('Justificatif enregistré', titre + ' : ' + libelle + (montant !== '' ? ' : ' + formatMoneyPlain(montant) : ''));
     statusEl.textContent = resultats.join(' · ');
     if(type === 'facture_payee') await apprendreFournisseurCompta(libelle, comptaCompteDetecte);   // seuls les fournisseurs sont mémorisés, pas les clients
     CHAMPS_COMPTA_AUTO.forEach(function(id){ const c = document.getElementById(id); c.value = ''; c.dataset.auto = ''; });
