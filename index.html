@@ -746,7 +746,7 @@
 /* ===== Refonte Umami : palette tirée du logo (noir sumi, vermillon, crème washi) ===== */
 :root{
   --ink:#0f0d0c; --paper:#f1e8d3; --panel:#181514; --panel-2:#221d1b; --line:#3b2a26;
-  --accent:#d62a1f; --accent-soft:#e9dec6; --gold:#e6d3a8; --ok:#6aa36a; --warn:#d9a03a;
+  --accent:#c0281c; --accent-soft:#e9dec6; --gold:#e6d3a8; --ok:#6aa36a; --warn:#d9a03a;
   --danger:#d62a1f; --text-muted:#a39787;
   --f-display:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',Georgia,serif;
   --f-body:'Zen Kaku Gothic New','Hiragino Kaku Gothic ProN','Helvetica Neue',Arial,sans-serif;
@@ -843,7 +843,7 @@ body::after{content:"";position:fixed;inset:0;z-index:2000;pointer-events:none;o
 @media print{body::after{display:none;}}
 
 /* bandeau de page : aplat vermillon */
-header.top{background:var(--accent);border-top:0;border-bottom:4px solid #0f0d0c;padding:36px 28px 28px;}
+header.top{background:linear-gradient(120deg,#5a120e 0%,#8e1f16 48%,#a82a1b 100%);border-top:0;border-bottom:4px solid #0f0d0c;padding:36px 28px 28px;}
 header.top h1{color:#fbf4e4;font-size:clamp(40px,7vw,76px);line-height:.95;}
 header.top .brand-mark{color:#0f0d0c;font-size:15px;}
 header.top .subtitle{color:#fbf4e4;opacity:.92;font-size:14px;}
@@ -861,7 +861,7 @@ html[data-theme="light"] header.top{border-bottom-color:#16110f;}
 /* accueil */
 #landingScreen{background:#0c0a09;}
 #landingScreen::before{display:none;}
-.landing-sun{position:absolute;right:-16vmin;top:50%;width:106vmin;height:106vmin;border-radius:50%;background:radial-gradient(circle at 34% 30%,#ec3a2c 0,#d62a1f 46%,#b81f16 100%);box-shadow:0 0 160px rgba(214,42,31,.45);transform:translateY(-50%);animation:sun-rise 1.3s cubic-bezier(.16,.8,.2,1) both;}
+.landing-sun{position:absolute;right:-16vmin;top:50%;width:106vmin;height:106vmin;border-radius:50%;background:radial-gradient(circle at 34% 28%,#b92d1e 0,#8e1f16 42%,#5a120e 78%,#3a0b09 100%);box-shadow:0 0 140px rgba(142,31,22,.35);transform:translateY(-50%);animation:sun-rise 1.3s cubic-bezier(.16,.8,.2,1) both;}
 @keyframes sun-rise{from{opacity:0;transform:translateY(-38%) scale(.82);}to{opacity:1;transform:translateY(-50%) scale(1);}}
 .landing-dragon{right:-1vmin;width:min(80vmin,780px);filter:drop-shadow(14px 20px 0 rgba(12,10,9,.55));animation:dragon-in 1.3s .25s cubic-bezier(.2,.7,.2,1) both;}
 .landing-inner{padding-left:clamp(24px,6vw,110px);width:min(100%,760px);}
