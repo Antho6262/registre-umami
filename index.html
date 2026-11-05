@@ -966,6 +966,73 @@ header.top{background:linear-gradient(115deg,#241210 0%,#4d1c16 22%,#7a2a20 48%,
 .fiche-row:hover{background:var(--panel-2);}
 @media (max-width:560px){.fiche-row{grid-template-columns:1fr 1fr;}}
 </style>
+<style id="refonte5">
+/* ===== Direction : barre rangée, tuiles, liste en cartes, fenêtre de commande par étapes ===== */
+.dir-bar{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin:22px 0 28px;padding:12px 16px;border:2px solid var(--line);background:var(--panel);}
+.dir-user{display:flex;align-items:center;gap:12px;}
+.dir-avatar{width:42px;height:42px;border-radius:50%;background:#a82f22;color:#fbf4e4;display:grid;place-items:center;font-family:var(--f-display);font-weight:800;font-size:19px;flex:none;}
+.dir-user small{display:block;font-size:12px;color:var(--text-muted);line-height:1.2;}
+.dir-user b{font-family:var(--f-display);font-size:18px;color:var(--paper);}
+.dir-bar-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.dir-ghost{background:none;border:2px solid var(--line);color:var(--accent-soft);font-family:var(--f-body);font-size:13px;font-weight:700;padding:8px 14px;cursor:pointer;border-radius:2px;}
+.dir-ghost:hover{border-color:#f1e8d3;color:var(--paper);}
+.dir-section-title{font-family:var(--f-display);font-weight:800;font-size:22px;color:var(--paper);margin:0 0 12px;}
+.dir-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:34px;}
+.dir-tile{display:block;text-align:left;padding:14px 16px;border:2px solid var(--line);background:var(--panel);color:var(--paper);cursor:pointer;font-family:var(--f-body);border-radius:0;transition:transform .12s ease,box-shadow .12s ease,border-color .12s ease;}
+.dir-tile .t{display:block;font-family:var(--f-display);font-weight:800;font-size:17px;}
+.dir-tile .d{display:block;font-size:12.5px;color:var(--text-muted);margin-top:3px;line-height:1.35;}
+.dir-tile:hover{border-color:#f1e8d3;transform:translate(-2px,-2px);box-shadow:5px 5px 0 #5f1d16;}
+body.read-only-mode #dirComptaBtn{display:none;}
+.dir-orders-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
+.seg{display:inline-flex;border:2px solid var(--line);}
+.seg button{background:none;border:none;color:var(--accent-soft);font-family:var(--f-body);font-weight:700;font-size:14px;padding:10px 18px;cursor:pointer;}
+.seg button + button{border-left:2px solid var(--line);}
+.seg button.on{background:#a82f22;color:#fbf4e4;}
+.seg .n{display:inline-block;min-width:22px;margin-left:6px;padding:0 6px;border-radius:999px;background:rgba(241,232,211,.15);font-size:12px;text-align:center;}
+.dir-orders-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+
+.order-row{display:grid;grid-template-columns:100px minmax(0,1fr) 120px 190px;gap:12px;align-items:center;padding:14px 16px;margin-bottom:10px;border:2px solid var(--line);border-left:5px solid var(--line);background:var(--panel);cursor:pointer;transition:transform .12s ease,box-shadow .12s ease,border-color .12s ease;}
+.order-row:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 #5f1d16;border-color:#f1e8d3;}
+.order-row .o-date{font-size:13px;color:var(--text-muted);}
+.order-row .o-client{font-family:var(--f-display);font-weight:800;font-size:17px;color:var(--paper);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.order-row .o-client small{display:block;font-family:var(--f-body);font-weight:400;font-size:12px;color:var(--text-muted);}
+.order-row .o-amount{font-weight:700;color:var(--paper);text-align:right;}
+.order-row.st-en_attente{border-left-color:#d9a03a;}
+.order-row.st-validee{border-left-color:#e9dec6;}
+.order-row.st-payee{border-left-color:#6aa36a;}
+.order-row.st-refusee,.order-row.st-annulee{border-left-color:#7d1610;opacity:.8;}
+.pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:700;border:1.5px solid currentColor;white-space:nowrap;}
+.pill-en_attente{color:#e6b25a;background:rgba(217,160,58,.12);}
+.pill-validee{color:#e9dec6;background:rgba(233,222,198,.10);}
+.pill-payee{color:#8cc58c;background:rgba(106,163,106,.14);}
+.pill-prete,.pill-livraison{color:#f1e8d3;background:#a82f22;border-color:#a82f22;}
+.pill-remise{color:#0f0d0c;background:#8cc58c;border-color:#8cc58c;}
+.pill-refusee,.pill-annulee{color:#d98a82;background:rgba(125,22,16,.25);}
+@media (max-width:720px){.order-row{grid-template-columns:1fr auto;}.order-row .o-date{grid-column:1/-1;}.order-row .o-amount{text-align:left;}}
+
+/* fenêtre de commande */
+.detail-panel{max-width:720px!important;padding:0!important;}
+.detail-head{position:sticky;top:0;z-index:3;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 22px;background:var(--panel);border-bottom:2px solid var(--line);}
+.detail-head h2{margin:0!important;}
+.detail-x{background:none;border:2px solid var(--line);color:var(--paper);width:38px;height:38px;font-size:18px;cursor:pointer;border-radius:2px;}
+.detail-x:hover{border-color:#f1e8d3;}
+.detail-body{padding:18px 22px 6px;}
+.next-step{margin:14px 0 4px;padding:14px 16px;border:2px solid #a82f22;border-left-width:8px;background:rgba(168,47,34,.12);color:var(--paper);font-weight:700;line-height:1.4;}
+.next-step.done{border-color:#6aa36a;background:rgba(106,163,106,.12);}
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:16px 0;}
+.info-grid div{padding:10px 12px;border:2px solid var(--line);background:var(--panel-2);}
+.info-grid dt{font-size:12px;color:var(--text-muted);margin:0 0 3px;}
+.info-grid dd{margin:0;font-weight:700;color:var(--paper);word-break:break-word;}
+.detail-actions{position:sticky;bottom:0;z-index:3;background:var(--panel);border-top:2px solid var(--line);padding:14px 22px 16px;}
+.act-main{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+.act-main .btn{flex:1 1 190px;padding:16px 18px;font-size:16px;text-align:center;}
+.act-main .btn.btn-alt{background:transparent;color:var(--paper);border:2px solid #f1e8d3;box-shadow:none;}
+.act-main .btn.btn-no{background:transparent;color:#d98a82;border:2px solid #7d1610;box-shadow:none;flex:0 1 150px;}
+.act-main .btn.btn-ok{background:#3d6b3d;box-shadow:0 3px 0 #264626;}
+.act-more{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+.act-more .btn{padding:9px 14px;font-size:13px;}
+.act-more .btn.danger{color:#d98a82;border-color:#7d1610;}
+</style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -1463,26 +1530,35 @@ header.top{background:linear-gradient(115deg,#241210 0%,#4d1c16 22%,#7a2a20 48%,
 <div id="undoToast"></div>
 
 <div class="modal-backdrop" id="commandeDetailModal" style="display:none;">
-  <section class="members-panel" style="max-width:640px;">
-    <h2>Détail de la commande</h2>
-    <div id="commandeDetailContent"></div>
-    <div class="notes-box">
-      <h4>Notes internes (visibles seulement par le staff)</h4>
-      <div id="commandeNotesList"></div>
-      <textarea id="commandeNoteInput" placeholder="Ajouter une note pour l'équipe"></textarea>
-      <div class="add-actions" style="margin-top:8px;"><button class="btn secondary" id="commandeNoteAdd" type="button">Enregistrer la note</button></div>
+  <section class="members-panel detail-panel">
+    <div class="detail-head">
+      <h2>Détail de la commande</h2>
+      <button class="detail-x" id="commandeDetailClose" type="button" aria-label="Fermer">✕</button>
     </div>
-    <div class="add-actions">
-      <button class="btn secondary" id="commandeDetailClose" type="button">Fermer</button>
-      <button class="btn secondary" id="commandeRefuseBtn" type="button" style="border-color:var(--accent);color:var(--accent);">Refuser</button>
-      <button class="btn secondary" id="commandePaidBtn" type="button" style="border-color:var(--ok);color:var(--ok);display:none;">Marquer payée</button>
-      <button class="btn secondary" id="commandePretBtn" type="button" style="border-color:var(--gold);color:var(--gold);display:none;">Commande prête</button>
-      <button class="btn secondary" id="commandeLivraisonBtn" type="button" style="border-color:var(--gold);color:var(--gold);display:none;">🚚 En cours de livraison</button>
-      <button class="btn secondary" id="commandeRemiseBtn" type="button" style="border-color:var(--ok);color:var(--ok);display:none;">✅ Remise au client</button>
-      <button class="btn secondary" id="commandeFicheBtn" type="button">Fiche du client</button>
-      <button class="btn secondary" id="commandeCancelBtn" type="button" style="border-color:var(--accent);color:var(--accent);display:none;">🚫 Annuler la commande</button>
-      <button class="btn secondary" id="commandeArchiveBtn" type="button" style="border-color:var(--text-muted);color:var(--text-muted);display:none;">Archiver</button>
-      <button class="btn" id="commandeAcceptBtn" type="button">Accepter</button>
+    <div class="detail-body">
+      <div id="commandeDetailSteps"></div>
+      <div id="commandeDetailContent"></div>
+      <div class="notes-box">
+        <h4>Notes internes (visibles seulement par le staff)</h4>
+        <div id="commandeNotesList"></div>
+        <textarea id="commandeNoteInput" placeholder="Ajouter une note pour l'équipe"></textarea>
+        <div class="add-actions" style="margin-top:8px;"><button class="btn secondary" id="commandeNoteAdd" type="button">Enregistrer la note</button></div>
+      </div>
+    </div>
+    <div class="detail-actions">
+      <div class="act-main" id="actMain">
+        <button class="btn" id="commandeAcceptBtn" type="button">✅ Accepter la commande</button>
+        <button class="btn btn-no" id="commandeRefuseBtn" type="button">Refuser</button>
+        <button class="btn btn-ok" id="commandePaidBtn" type="button" style="display:none;">💰 Marquer payée</button>
+        <button class="btn btn-alt" id="commandePretBtn" type="button" style="display:none;">📦 Commande prête</button>
+        <button class="btn" id="commandeLivraisonBtn" type="button" style="display:none;">🚚 En cours de livraison</button>
+        <button class="btn btn-ok" id="commandeRemiseBtn" type="button" style="display:none;">✅ Remise au client</button>
+      </div>
+      <div class="act-more">
+        <button class="btn secondary" id="commandeFicheBtn" type="button">Fiche du client</button>
+        <button class="btn secondary" id="commandeArchiveBtn" type="button" style="display:none;">Archiver</button>
+        <button class="btn secondary danger" id="commandeCancelBtn" type="button" style="display:none;">🚫 Annuler la commande</button>
+      </div>
     </div>
   </section>
 </div>
@@ -1502,21 +1578,36 @@ header.top{background:linear-gradient(115deg,#241210 0%,#4d1c16 22%,#7a2a20 48%,
   </header>
 
   <div class="wrap">
-    <div class="session-bar">
-      Connecté en tant que <b id="dirSessionName">—</b>
-      <button id="dirChangePwBtn">Changer mon mot de passe</button>
-      <button id="dirManageMembersBtn" style="display:none;">Gérer les membres</button>
-      <button id="dirWebhooksBtn">Webhooks entreprises</button>
-      <button id="dirWebhooksFamillesBtn">Webhooks familles</button>
-      <button id="dirComptaBtn">Comptabilité</button>
-      <button class="themeToggle">Thème clair/sombre</button>
-      <button id="dirBackBtn">← Accueil</button>
-      <button id="dirLogoutBtn">Déconnexion</button>
+    <div class="dir-bar">
+      <div class="dir-user">
+        <span class="dir-avatar" id="dirAvatar" aria-hidden="true">?</span>
+        <div><small>Connecté en tant que</small><b id="dirSessionName">-</b></div>
+      </div>
+      <div class="dir-bar-actions">
+        <button class="dir-ghost" id="dirBackBtn" type="button">← Accueil</button>
+        <button class="dir-ghost themeToggle" type="button">Thème clair/sombre</button>
+        <button class="dir-ghost" id="dirLogoutBtn" type="button">Déconnexion</button>
+      </div>
     </div>
 
-    <div class="toolbar">
-      <button class="btn secondary" id="toggleArchivedBtn">Voir les archives</button>
-      <button class="btn secondary" id="clientsListBtn">Fiches clients</button>
+    <h2 class="dir-section-title">Gestion</h2>
+    <div class="dir-tiles">
+      <button class="dir-tile" id="dirWebhooksBtn" type="button"><span class="t">Webhooks entreprises</span><span class="d">Salon Discord de chaque entreprise</span></button>
+      <button class="dir-tile" id="dirWebhooksFamillesBtn" type="button"><span class="t">Webhooks familles</span><span class="d">Salon Discord de chaque famille</span></button>
+      <button class="dir-tile" id="dirComptaBtn" type="button"><span class="t">Comptabilité</span><span class="d">Factures et journal Google Sheet</span></button>
+      <button class="dir-tile" id="dirManageMembersBtn" type="button" style="display:none;"><span class="t">Gérer les membres</span><span class="d">Comptes Direction et Responsables</span></button>
+      <button class="dir-tile" id="dirChangePwBtn" type="button"><span class="t">Mon mot de passe</span><span class="d">Changer mon mot de passe</span></button>
+    </div>
+
+    <div class="dir-orders-head">
+      <h2 class="dir-section-title" style="margin:0;">Commandes</h2>
+      <div class="dir-orders-tools">
+        <div class="seg" role="group" aria-label="Affichage des commandes">
+          <button type="button" class="on" id="segActive">Actives<span class="n" id="segActiveCount">0</span></button>
+          <button type="button" id="segArchived">Archives<span class="n" id="segArchivedCount">0</span></button>
+        </div>
+        <button class="btn secondary" id="clientsListBtn" type="button">Fiches clients</button>
+      </div>
     </div>
     <p class="result-count" id="commandesResultCount"></p>
     <div id="commandesList" class="hist-list"></div>
@@ -2437,6 +2528,7 @@ function enterApp(){
     document.getElementById('landingScreen').style.display = 'none';
     document.getElementById('directionMain').style.display = 'block';
     document.getElementById('dirSessionName').textContent = currentUser.nom;
+    document.getElementById('dirAvatar').textContent = (currentUser.nom || '?').trim().charAt(0).toUpperCase();
     document.getElementById('dirManageMembersBtn').style.display = currentUser.isAdmin ? 'inline-block' : 'none';
     renderCommandesList();
   }else{
@@ -3998,7 +4090,7 @@ function wireProofSubmit(container, getOrder, onDone){
   });
 }
 
-function orderTrackerHTML(o){
+function orderTrackerHTML(o, opts){
   if(o.statut === 'annulee') return '<p class="track-stop">🚫 Commande annulée</p>';
   if(o.statut === 'refusee') return '<p class="track-stop">❌ Commande refusée</p>';
   const livraison = o.modeLivraison === 'livraison';
@@ -4009,6 +4101,7 @@ function orderTrackerHTML(o){
     { label: 'Prête', done: !!o.prete }
   ];
   if(livraison) steps.push({ label: 'En livraison', done: !!o.enLivraison });
+  if(opts && opts.remise) steps.push({ label: 'Remise', done: !!o.remise });
   let currentSet = false;
   return '<ol class="track" aria-label="Suivi de la commande">' + steps.map(st => {
     let cls = '';
@@ -4253,6 +4346,8 @@ let allCommandesCache = [];
 
 function renderCommandesFromOrders(allOrders){
   allCommandesCache = allOrders;
+  document.getElementById('segActiveCount').textContent = allOrders.filter(o => !o.archivee).length;
+  document.getElementById('segArchivedCount').textContent = allOrders.filter(o => !!o.archivee).length;
   const orders = allOrders.filter(o => showArchivedOrders ? !!o.archivee : !o.archivee);
   const host = document.getElementById('commandesList');
   const countEl = document.getElementById('commandesResultCount');
@@ -4262,25 +4357,35 @@ function renderCommandesFromOrders(allOrders){
     return;
   }
   const STATUT_LABEL = { en_attente:'⏳ En attente', validee:'✅ Validée', payee:'💰 Payée', refusee:'❌ Refusée', annulee:'🚫 Annulée' };
-  if(countEl) countEl.textContent = orders.length + ' commande' + (orders.length>1?'s':'') + (showArchivedOrders ? ' archivée' + (orders.length>1?'s':'') : ' active' + (orders.length>1?'s':''));
-  host.innerHTML = orders.map(o =>
-    '<div class="hist-row" style="grid-template-columns:130px 1fr 100px 120px;cursor:pointer;" data-ref="' + o.ref + '">' +
-    '<span class="hist-date">' + new Date(o.ts).toLocaleDateString('fr-FR') + '</span>' +
-    '<span class="hist-user">' + escapeHtml(o.client) + '</span>' +
-    '<span class="hist-action">' + formatMoneyPlain(o.ttc) + '</span>' +
-    '<span class="hist-details">' + (STATUT_LABEL[o.statut]||o.statut) + '</span>' +
-    '</div>'
-  ).join('');
+  if(countEl) countEl.textContent = '';
+  host.innerHTML = orders.map(o => {
+    let pillClass = 'pill-' + o.statut, pillText = STATUT_LABEL[o.statut] || o.statut;
+    if(o.statut !== 'refusee' && o.statut !== 'annulee'){
+      if(o.remise){ pillClass = 'pill-remise'; pillText = '✅ Remise'; }
+      else if(o.enLivraison){ pillClass = 'pill-livraison'; pillText = '🚚 En livraison'; }
+      else if(o.prete){ pillClass = 'pill-prete'; pillText = '📦 Prête'; }
+    }
+    const sub = (o.modeLivraison === 'livraison' ? '🚚 Livraison' : '🍱 Récupération') + (o.paiementCash ? ' · paie sur place' : '');
+    return '<div class="order-row st-' + o.statut + '" data-ref="' + o.ref + '">' +
+      '<span class="o-date">' + new Date(o.ts).toLocaleDateString('fr-FR') + '</span>' +
+      '<span class="o-client">' + escapeHtml(o.client) + '<small>' + sub + '</small></span>' +
+      '<span class="o-amount">' + formatMoneyPlain(o.ttc) + '</span>' +
+      '<span><span class="pill ' + pillClass + '">' + pillText + '</span></span>' +
+      '</div>';
+  }).join('');
   host.querySelectorAll('[data-ref]').forEach(row=>{
     row.addEventListener('click', ()=> openCommandeDetail(allOrders.find(o=>o.ref===row.getAttribute('data-ref'))));
   });
 }
 
-document.getElementById('toggleArchivedBtn').addEventListener('click', ()=>{
-  showArchivedOrders = !showArchivedOrders;
-  document.getElementById('toggleArchivedBtn').textContent = showArchivedOrders ? '← Voir les commandes actives' : 'Voir les archives';
+function setOrdersView(archived){
+  showArchivedOrders = archived;
+  document.getElementById('segActive').classList.toggle('on', !archived);
+  document.getElementById('segArchived').classList.toggle('on', archived);
   renderCommandesFromOrders(allCommandesCache);
-});
+}
+document.getElementById('segActive').addEventListener('click', ()=> setOrdersView(false));
+document.getElementById('segArchived').addEventListener('click', ()=> setOrdersView(true));
 
 function renderCommandesList(){
   const host = document.getElementById('commandesList');
@@ -4302,19 +4407,43 @@ function renderCommandesList(){
 }
 
 let currentDetailOrder = null;
+function etapeSuivanteHTML(order){
+  if(order.statut === 'annulee' || order.statut === 'refusee') return '';
+  let txt = '', done = false;
+  if(order.remise){ txt = '✅ Commande terminée.' + (order.statut === 'payee' ? ' Tu peux l\'archiver.' : ' Pense à marquer le paiement.'); done = true; }
+  else if(order.statut === 'en_attente'){ txt = 'À faire : vérifier les stocks, puis accepter ou refuser la commande.'; }
+  else if(order.enLivraison){ txt = 'Livraison en cours. Clique sur « Remise au client » une fois la commande livrée.'; }
+  else if(order.prete && order.modeLivraison === 'livraison'){ txt = 'Commande prête : lance la livraison.'; }
+  else if(order.prete){ txt = 'Commande prête : remets-la au client quand il passe la récupérer.'; }
+  else if(order.statut === 'validee'){ txt = order.paiementCash ? 'Le client paie en personne. Prépare la commande, puis marque-la payée à la remise.' : 'En attente du paiement. Tu peux déjà préparer la commande.'; }
+  else if(order.statut === 'payee'){ txt = 'Paiement reçu : prépare la commande puis clique sur « Commande prête ».'; }
+  if(order.prete && !order.remise && order.statut === 'validee') txt += ' Le paiement est toujours en attente.';
+  return '<div class="next-step' + (done ? ' done' : '') + '">' + txt + '</div>';
+}
+
+function infoGridHTML(order){
+  const paiement = order.paiementCash ? '💵 Sur place (facture directe)' :
+    (order.preuvePaiement ? (/^https?:/.test(order.preuvePaiement) ? '💳 Virement : <a href="' + escapeHtml(order.preuvePaiement) + '" target="_blank" rel="noopener" style="color:var(--gold);">voir la preuve</a>' : '💳 Virement : ' + escapeHtml(order.preuvePaiement)) : (order.statut === 'payee' ? '💰 Payé' : 'Pas encore choisi'));
+  const items = [
+    ['Client', escapeHtml(order.client)],
+    ['Téléphone', order.tel ? escapeHtml(order.tel) : '-'],
+    ['Souhaite', order.modeLivraison === 'livraison' ? '🚚 Être livré' : '🍱 Récupérer sur place'],
+    ['Zone fiscale', order.zone ? escapeHtml(order.zone) : '-'],
+    ['Paiement', paiement],
+    ['Webhook client', order.clientWebhook ? 'Configuré ✓' : 'Aucun']
+  ];
+  if(order.dispoInitiale) items.push(['Disponibilités à la commande', escapeHtml(order.dispoInitiale)]);
+  if(order.disponibilite) items.push(['Disponibilité indiquée', escapeHtml(order.disponibilite)]);
+  if(order.avis) items.push(['Avis du client', '⭐ ' + order.avis.note + '/5' + (order.avis.commentaire ? ' : ' + escapeHtml(order.avis.commentaire) : '')]);
+  if(order.archivee) items.push(['Archivage', '📦 Commande archivée']);
+  return '<dl class="info-grid">' + items.map(it => '<div><dt>' + it[0] + '</dt><dd>' + it[1] + '</dd></div>').join('') + '</dl>';
+}
+
 function openCommandeDetail(order){
   currentDetailOrder = order;
-  document.getElementById('commandeDetailContent').innerHTML = generateDevisHTML(order, (order.statut==='validee'||order.statut==='payee') ? 'FACTURE' : 'DEVIS') +
-    (order.tel ? '<p style="padding:0 24px 4px;">Téléphone : ' + escapeHtml(order.tel) + '</p>' : '') +
-    (order.clientWebhook ? '<p style="padding:0 24px 4px;">Webhook client : configuré ✓</p>' : '') +
-    '<p style="padding:0 24px 4px;">Souhaite : ' + (order.modeLivraison === 'livraison' ? '🚚 Être livré' : '🍱 Récupérer sur place') + '</p>' +
-    (order.dispoInitiale ? '<p style="padding:0 24px 4px;color:var(--gold);">📅 Disponibilités (données à la commande) : ' + escapeHtml(order.dispoInitiale) + '</p>' : '') +
-    (order.enLivraison ? '<p style="padding:0 24px 4px;color:var(--gold);font-weight:bold;">🚚 Commande en cours de livraison</p>' : '') +
-    (order.prete ? '<p style="padding:0 24px 4px;color:var(--gold);font-weight:bold;">' + (order.modeLivraison === 'livraison' ? '🚚 Commande marquée prête (livraison)' : '🍱 Commande marquée prête (récupération)') + '</p>' : '') +
-    (order.disponibilite ? '<p style="padding:0 24px 12px;color:var(--gold);">📅 Disponibilité du client : ' + escapeHtml(order.disponibilite) + '</p>' : '') +
-    (order.remise ? '<p style="padding:0 24px 4px;color:var(--ok);font-weight:bold;">✅ Commande remise au client</p>' : '') +
-    (order.avis ? '<p style="padding:0 24px 12px;color:var(--gold);font-weight:bold;">⭐ Avis du client : ' + order.avis.note + '/5' + (order.avis.commentaire ? ' : ' + escapeHtml(order.avis.commentaire) : '') + '</p>' : '') +
-    (order.archivee ? '<p style="padding:0 24px 12px;color:var(--text-muted);font-weight:bold;">📦 Commande archivée</p>' : '');
+  document.getElementById('commandeDetailSteps').innerHTML = orderTrackerHTML(order, { remise: true }) + etapeSuivanteHTML(order);
+  document.getElementById('commandeDetailContent').innerHTML = infoGridHTML(order) +
+    generateDevisHTML(order, (order.statut==='validee'||order.statut==='payee') ? 'FACTURE' : 'DEVIS');
   const isPending = order.statut === 'en_attente';
   const isValidee = order.statut === 'validee';
   const canMarkReady = (order.statut === 'validee' || order.statut === 'payee') && !order.prete;
@@ -4329,7 +4458,12 @@ function openCommandeDetail(order){
   attachNotesListener(order.ref);
   document.getElementById('commandeArchiveBtn').style.display = canArchive ? 'inline-block' : 'none';
   document.getElementById('commandeCancelBtn').style.display = canCancel ? 'inline-block' : 'none';
+  const pret = document.getElementById('commandePretBtn');
+  pret.classList.toggle('btn-alt', order.statut !== 'payee');
+  const actMain = document.getElementById('actMain');
+  actMain.style.display = Array.from(actMain.children).some(b => b.style.display !== 'none') ? 'flex' : 'none';
   document.getElementById('commandeDetailModal').style.display = 'flex';
+  document.querySelector('#commandeDetailModal .detail-panel').scrollTop = 0;
 }
 
 document.getElementById('dirBackBtn').addEventListener('click', ()=> clearSession());
