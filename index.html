@@ -1033,6 +1033,39 @@ body.read-only-mode #dirComptaBtn{display:none;}
 .act-more .btn{padding:9px 14px;font-size:13px;}
 .act-more .btn.danger{color:#d98a82;border-color:#7d1610;}
 </style>
+<style id="refonte6">
+/* ===== Fenêtre de commande : facture à gauche, actions à droite, rien à faire défiler pour voir la facture ===== */
+#commandeDetailModal{align-items:center;padding:18px;z-index:1000;}
+#commandeDetailModal .detail-panel{width:min(1240px,100%)!important;max-width:1240px!important;height:min(94vh,980px);display:flex;flex-direction:column;overflow:hidden;}
+.detail-split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 410px;}
+.detail-invoice{overflow:auto;padding:18px 18px 18px 22px;background:var(--panel-2);}
+.detail-invoice > div{zoom:.86;}
+.detail-side{overflow:auto;padding:16px 20px 20px;border-left:2px solid var(--line);background:var(--panel);display:flex;flex-direction:column;gap:14px;}
+.detail-side .track{margin:4px 0 0;}
+.detail-side .track li{font-size:11px;}
+.detail-side .track .dot{width:26px;height:26px;font-size:12px;}
+.detail-side .track li::before{top:12px;}
+.detail-side .next-step{margin:0;}
+.detail-side .act-main{margin:0;}
+.detail-side .act-main .btn{flex:1 1 100%;}
+.detail-side .act-main .btn.btn-no{flex:1 1 100%;padding:11px 14px;font-size:14px;}
+.detail-side .act-more{justify-content:flex-start;}
+.detail-side .info-grid{grid-template-columns:1fr 1fr;margin:0;}
+.detail-side .notes-box{margin-top:0;}
+@media (max-width:900px){
+  #commandeDetailModal{padding:8px;}
+  #commandeDetailModal .detail-panel{height:96vh;}
+  .detail-split{display:flex;flex-direction:column;overflow:auto;}
+  .detail-side{display:contents;}
+  .detail-invoice{overflow:visible;order:3;padding:14px;}
+  .detail-invoice > div{zoom:1;}
+  .side-steps{order:1;padding:14px 16px 0;background:var(--panel);}
+  .side-actions{order:2;padding:12px 16px;background:var(--panel);border-bottom:2px solid var(--line);}
+  .side-info{order:4;padding:14px 16px 0;background:var(--panel);}
+  .side-notes{order:5;padding:0 16px 20px;background:var(--panel);}
+  .detail-side .act-main .btn{flex:1 1 150px;}
+}
+</style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -1535,30 +1568,35 @@ body.read-only-mode #dirComptaBtn{display:none;}
       <h2>Détail de la commande</h2>
       <button class="detail-x" id="commandeDetailClose" type="button" aria-label="Fermer">✕</button>
     </div>
-    <div class="detail-body">
-      <div id="commandeDetailSteps"></div>
-      <div id="commandeDetailContent"></div>
-      <div class="notes-box">
-        <h4>Notes internes (visibles seulement par le staff)</h4>
-        <div id="commandeNotesList"></div>
-        <textarea id="commandeNoteInput" placeholder="Ajouter une note pour l'équipe"></textarea>
-        <div class="add-actions" style="margin-top:8px;"><button class="btn secondary" id="commandeNoteAdd" type="button">Enregistrer la note</button></div>
-      </div>
-    </div>
-    <div class="detail-actions">
-      <div class="act-main" id="actMain">
-        <button class="btn" id="commandeAcceptBtn" type="button">✅ Accepter la commande</button>
-        <button class="btn btn-no" id="commandeRefuseBtn" type="button">Refuser</button>
-        <button class="btn btn-ok" id="commandePaidBtn" type="button" style="display:none;">💰 Marquer payée</button>
-        <button class="btn btn-alt" id="commandePretBtn" type="button" style="display:none;">📦 Commande prête</button>
-        <button class="btn" id="commandeLivraisonBtn" type="button" style="display:none;">🚚 En cours de livraison</button>
-        <button class="btn btn-ok" id="commandeRemiseBtn" type="button" style="display:none;">✅ Remise au client</button>
-      </div>
-      <div class="act-more">
-        <button class="btn secondary" id="commandeFicheBtn" type="button">Fiche du client</button>
-        <button class="btn secondary" id="commandeArchiveBtn" type="button" style="display:none;">Archiver</button>
-        <button class="btn secondary danger" id="commandeCancelBtn" type="button" style="display:none;">🚫 Annuler la commande</button>
-      </div>
+    <div class="detail-split">
+      <div class="detail-invoice" id="commandeDetailContent"></div>
+      <aside class="detail-side">
+        <div class="side-steps" id="commandeDetailSteps"></div>
+        <div class="side-actions">
+          <div class="act-main" id="actMain">
+            <button class="btn" id="commandeAcceptBtn" type="button">✅ Accepter la commande</button>
+            <button class="btn btn-no" id="commandeRefuseBtn" type="button">Refuser</button>
+            <button class="btn btn-ok" id="commandePaidBtn" type="button" style="display:none;">💰 Marquer payée</button>
+            <button class="btn btn-alt" id="commandePretBtn" type="button" style="display:none;">📦 Commande prête</button>
+            <button class="btn" id="commandeLivraisonBtn" type="button" style="display:none;">🚚 En cours de livraison</button>
+            <button class="btn btn-ok" id="commandeRemiseBtn" type="button" style="display:none;">✅ Remise au client</button>
+          </div>
+          <div class="act-more">
+            <button class="btn secondary" id="commandeFicheBtn" type="button">Fiche du client</button>
+            <button class="btn secondary" id="commandeArchiveBtn" type="button" style="display:none;">Archiver</button>
+            <button class="btn secondary danger" id="commandeCancelBtn" type="button" style="display:none;">🚫 Annuler la commande</button>
+          </div>
+        </div>
+        <div class="side-info" id="commandeDetailInfo"></div>
+        <div class="side-notes">
+          <div class="notes-box">
+            <h4>Notes internes (visibles seulement par le staff)</h4>
+            <div id="commandeNotesList"></div>
+            <textarea id="commandeNoteInput" placeholder="Ajouter une note pour l'équipe"></textarea>
+            <div class="add-actions" style="margin-top:8px;"><button class="btn secondary" id="commandeNoteAdd" type="button">Enregistrer la note</button></div>
+          </div>
+        </div>
+      </aside>
     </div>
   </section>
 </div>
@@ -4442,7 +4480,8 @@ function infoGridHTML(order){
 function openCommandeDetail(order){
   currentDetailOrder = order;
   document.getElementById('commandeDetailSteps').innerHTML = orderTrackerHTML(order, { remise: true }) + etapeSuivanteHTML(order);
-  document.getElementById('commandeDetailContent').innerHTML = infoGridHTML(order) +
+  document.getElementById('commandeDetailInfo').innerHTML = infoGridHTML(order);
+  document.getElementById('commandeDetailContent').innerHTML =
     generateDevisHTML(order, (order.statut==='validee'||order.statut==='payee') ? 'FACTURE' : 'DEVIS');
   const isPending = order.statut === 'en_attente';
   const isValidee = order.statut === 'validee';
@@ -4463,7 +4502,7 @@ function openCommandeDetail(order){
   const actMain = document.getElementById('actMain');
   actMain.style.display = Array.from(actMain.children).some(b => b.style.display !== 'none') ? 'flex' : 'none';
   document.getElementById('commandeDetailModal').style.display = 'flex';
-  document.querySelector('#commandeDetailModal .detail-panel').scrollTop = 0;
+  document.querySelectorAll('#commandeDetailModal .detail-invoice, #commandeDetailModal .detail-side, #commandeDetailModal .detail-split').forEach(e => { e.scrollTop = 0; });
 }
 
 document.getElementById('dirBackBtn').addEventListener('click', ()=> clearSession());
